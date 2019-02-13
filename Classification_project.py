@@ -12,7 +12,7 @@ def read_data(file_loc):
     dframe=pd.read_csv(file_loc)
     return dframe
 
-def remove_nan(dframe):
+def remove_nan_dframe(dframe):
     drop_index=[];
     (r,c)=dframe.shape
     for i in range(0,r):
@@ -23,7 +23,7 @@ def remove_nan(dframe):
     
 def make_cluster(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     if remove==True:
-        dframe=remove_nan(dframe)
+        dframe=remove_nan_dframe(dframe)
     cla=dframe[class_sort]
     lut = dict(zip(cla.unique(), 'rbg'))
     labels=cla.unique()
@@ -56,7 +56,7 @@ def approach_paper(dframe,thresholds):
 def compare_with_ground(dframe,prediction):
     """under construction"""
     clinical=dframe['primary_tumor']
-    clframe,kept=remove_nan(clinical)
+    "clframe,kept=remove_nan(clinical)"
     con=sklearn.metrics.confusion_matrix(clframe,prediction[kept])
     tn, fp, fn, tp = con([0, 1, 0, 1], [1, 1, 1, 0]).ravel()
     
