@@ -32,7 +32,6 @@ def remove_nan_list(lis):
             drop_index.append(i)
         else:
             kept.append(i)
-    print(type(drop_index))
     for index in sorted(drop_index, reverse=True):
         del lis[index]          
     return lis, kept
@@ -59,6 +58,7 @@ def make_cluster(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     return
 
 def approach_paper(dframe,thresholds):
+    """integer 0 implies that the patient is not expected to have a carcinoma and label 1 implies an expected carcinoma"""
     (rows,columns)=dframe.shape
     LC_index=[];
     for pat in range(0,rows):
@@ -67,23 +67,36 @@ def approach_paper(dframe,thresholds):
             if TM in thresholds.keys() and pat not in LC_index:
                 if dframe.iloc[pat,i]>=thresholds[TM]:
                     LC_index.append(pat)
-    LC_results=np.zeros(rows);
+    LC_results=[];
     for k in range(0,rows):
         if k in LC_index:
-            LC_results[k]=1
-    #0 means no cancer and 1 implies cancer
+            LC_results.append(1)
+        else:
+            LC_results.append(0)
     return LC_results
 
 def compare_with_ground(dframe,prediction,category):
     """under construction"""
-    truth=dframe[category]
-    truth=truth.tolist()
-    truth, kept=remove_nan_list(truth)   #hier zit een error
-    #convert the strings to integers
-    #confusion_matrix(truth,prediction[kept])
-    #tn, fp, fn, tp = confusion_matrix([0, 1, 0, 1], [1, 1, 1, 0]).ravel()
-    
-    return
+    tru=dframe[category]
+    tru=tru.tolist()
+    tru, kept=remove_nan_list(tru)   
+    ground=[];
+    for i in range(0,len(tru)):
+        if tru[i]=='Yes':       #dit is nu te specifiek
+            ground.append(1)
+        if tru[i]=='No':        #dit is nu te specifiek
+            ground.append(0)
+    pred_down=[];
+    for z in range(0,len(prediction)):
+        if z in kept:
+            pred_down.append(prediction[z])
+    confusion_matrix(ground,pred_down)  #het werkt nu tot hier
+    tn, fp, fn, tp = confusion_matrix([0, 1, 0, 1], [1, 1, 1, 0]).ravel()
+    sensitivity=tp/(tp+fn)
+    specificity=tn/(tn+fp)
+    PPV=tp/(tp+fp)
+    NPV=tn/(tn+fn)
+    return PPV,NPV,sensitivity,specificity
     
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
@@ -91,4 +104,4 @@ make_cluster(dframe=dframe, remove=True, save_fig=False, class_sort='lung_carcin
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 LC_paper=approach_paper(dframe,thresholds)
-compare_with_ground(dframe,LC_paper,'primary_tumor')     #moet dit primary tumor zijn of lung carcinoma??
+PPV,NPV,sensi,speci=compare_with_ground(dframe,LC_paper,'lung_carcinoma')     #moet dit primary tumor zijn of lung carcinoma??
