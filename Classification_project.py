@@ -10,6 +10,7 @@ import datetime
 from astropy.table import Table
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 from sklearn import tree
+from sklearn.model_selection import train_test_split
 import graphviz
 import numpy as np
 
@@ -92,20 +93,17 @@ def decisionT(dframe,cat,save_roc):
     labels=dframe[cat].unique()
     length=range(0,len(labels))
     lut = dict(zip(labels, length)) #create dictionary of possible options
-    msk = np.random.rand(len(dframe)) < 0.75   #split data in train and test
-    df_train=dframe[msk]
-    y_train=df_train[cat]
-    train_res_mapped = y_train.map(lut)
     markers=dframe.iloc[:,5:12]
-    train_mark=markers[msk]
+    y_true=dframe[cat]
+    X_train, X_test, y_train, y_test = train_test_split(markers, y_true, test_size=0.2)
     
+    train_res_mapped = y_train.map(lut)
+    train_mark=X_train
     clf = tree.DecisionTreeClassifier()
     clf.fit(train_mark.values,train_res_mapped)
     
-    df_test=dframe[~msk]
-    y_test=df_test[cat]
     test_res_map=y_test.map(lut)
-    test_mark=markers[~msk]
+    test_mark=X_test
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
     auc_DT=roc_auc(test_res_map,predictions,cat,save_roc)
     return auc_DT
