@@ -11,7 +11,7 @@ from astropy.table import Table
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 from sklearn import tree
 from sklearn.model_selection import train_test_split
-
+import numpy as np
 
 def read_data(file_loc):
     '''read the desired data from the csv file as a dataframe'''
@@ -90,7 +90,7 @@ def approach_paper(dframe,thresholds,category):
     lut = dict(zip(labels, [1,0]))
     ground = truth.map(lut)
     gr=ground.tolist()
-    PPV,NPV,sensitivity,specificity=compare_with_ground_binary(gr,predictions)
+    PPV,NPV,sensitivity,specificity=evaluate_stats(gr,predictions)
     return PPV,NPV,sensitivity,specificity
 
 
@@ -112,16 +112,24 @@ def decisionT(dframe,cat,save_roc):
     test_res_map=y_test.map(lut)
     test_mark=X_test
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
+    PPV,NPV,sensitivity,specificity=evaluate_stats(test_res_map,predictions)
+    print(PPV,NPV,sensitivity,specificity)
     auc_DT=roc_auc(test_res_map,predictions,cat,save_roc)    #moet nog verandert worden voor multiclass van tumor_subtype
     return auc_DT
 
-def compare_with_ground_binary(ground,prediction):
+def evaluate_stats(ground,prediction):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
-    cnf_matrix = confusion_matrix(ground,prediction)  
-    fp = cnf_matrix[0,1]
-    fn = cnf_matrix[1,0]
-    tp = cnf_matrix[1,1]
-    tn = cnf_matrix[0,0]
+    cnf_matrix = confusion_matrix(ground,prediction)
+    if len(np.unique(ground))>2 or len(np.unique(prediction))>2:   
+        fp = cnf_matrix.sum(axis=0) - np.diag(cnf_matrix)  
+        fn = cnf_matrix.sum(axis=1) - np.diag(cnf_matrix)
+        tp = np.diag(cnf_matrix)
+        tn = np.sum(cnf_matrix,axis=(0,1)) - (fp + fn + tp) 
+    else:
+        fp = cnf_matrix[0,1]
+        fn = cnf_matrix[1,0]
+        tp = cnf_matrix[1,1]
+        tn = cnf_matrix[0,0]
     sensitivity=tp/(tp+fn)
     specificity=tn/(tn+fp)
     PPV=tp/(tp+fp)
@@ -148,10 +156,24 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category):
     return
     
 def roc_auc(y_true,predictions,category,save_roc):
-    '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve''' 
-    fpr_keras, tpr_keras, thresholds_keras = roc_curve(y_true, predictions)
-    auc_keras = auc(fpr_keras, tpr_keras)
-    print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category)
+    '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve'''  
+    if len(np.unique(y_true))>2 or len(np.unique(predictions))>2:   #######nog mee nezig want werkt niet voor tumor subtype
+        n_classes=max(len(np.unique(y_true)),len(np.unique(predictions)))
+        fpr = dict()
+        tpr = dict()
+        AUC = dict()
+        for i in range(n_classes):
+                fpr[i], tpr[i], _ = roc_curve(y_true[:, i], predictions[:, i])
+                AUC[i] = auc(fpr[i], tpr[i])
+        # Compute micro-average ROC curve and ROC area
+        fpr["micro"], tpr["micro"], _ = roc_curve(y_true.ravel(), predictions.ravel())
+        roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+        
+    else:
+        fpr_keras, tpr_keras, _ = roc_curve(y_true, predictions)
+        auc_keras = auc(fpr_keras, tpr_keras)
+        print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category)
+        
     return auc_keras 
     
     
@@ -163,12 +185,13 @@ def print_stats(PPV,NPV,sensi,speci):
     print(t)
     return
     
-category_to_investigate='lung_carcinoma'
+category_to_investigate='tumor_subtype'
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
-PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
-print_stats(PPV,NPV,sensi,speci)
+if category_to_investigate=='lung_carcinoma' or category_to_investigate=='primary_tumor':
+    PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
+    print_stats(PPV,NPV,sensi,speci)
 aucDT=decisionT(dframe,category_to_investigate,save_roc=False)
