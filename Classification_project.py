@@ -5,10 +5,10 @@ Created by Ryan de Vries for project computational biology
 
 import pandas as pd
 import seaborn as sns
-import numpy as np
+import matplotlib.pyplot as plt
 import datetime
 from astropy.table import Table
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 def read_data(file_loc):
     '''read the desired data from the csv file as a dataframe'''
@@ -105,6 +105,30 @@ def compare_with_ground_basic(dframe,prediction,category):
         
     return PPV,NPV,sensitivity,specificity, cnf_matrix
 
+def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc):
+    g=plt.figure()
+    plt.plot(fpr_keras, tpr_keras, color='darkorange', label='ROC curve (area = %0.2f)' % auc_keras)
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic')
+    plt.legend(loc="lower right")
+    plt.show()
+    if save_roc==True:      #save the figure if wanted with a unique name to prevent overwriting files
+        x=datetime.datetime.now()
+        extra='_'.join([str(x.year),str(x.month),str(x.day),str(x.hour),str(x.minute),str(x.second)])
+        g.savefig('ROC_curve'+extra+'.png')
+    return
+    
+def roc_auc(y_true,y_pred,save_roc):
+    fpr_keras, tpr_keras, thresholds_keras = roc_curve(y_true, y_pred)
+    auc_keras = auc(fpr_keras, tpr_keras)
+    print_roc(fpr_keras, tpr_keras,auc_keras,save_roc)
+    return auc_keras 
+    
+    
 def print_stats(PPV,NPV,sensi,speci):
     'Make a tabel of the relevant statistical values and print this'''
     values='{:.2f} {:.2f} {:.2f} {:.2f}'.format(100*PPV,100*NPV,100*sensi,100*speci)
