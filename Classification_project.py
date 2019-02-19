@@ -12,6 +12,7 @@ from sklearn.metrics import confusion_matrix, roc_curve, auc
 from sklearn import tree
 from sklearn.model_selection import train_test_split
 import numpy as np
+from decimal import getcontext, Decimal
 
 def read_data(file_loc):
     '''read the desired data from the csv file as a dataframe'''
@@ -113,9 +114,10 @@ def decisionT(dframe,cat,save_roc):
     test_mark=X_test
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity=evaluate_stats(test_res_map,predictions)
-    print(PPV,NPV,sensitivity,specificity)
     auc_DT=roc_auc(test_res_map,predictions,cat,save_roc,lut)    #moet nog verandert worden voor multiclass van tumor_subtype
-    return auc_DT
+    
+    print_stats_adv(PPV,NPV,sensitivity,specificity,labels)
+    return auc_DT,PPV,NPV,sensitivity,specificity
 
 def evaluate_stats(ground,prediction):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
@@ -187,6 +189,13 @@ def print_stats(PPV,NPV,sensi,speci):
     t=Table([[float(values[0])],[float(values[1])],[float(values[2])],[float(values[3])]],names=('PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values'})
     print(t)
     return
+
+def print_stats_adv(PPV,NPV,sensi,speci,labels):
+    getcontext().prec = 4
+    data=[tuple(labels),tuple([Decimal(x) * 100 for x in PPV]),tuple([Decimal(x) * 100 for x in NPV]),tuple([Decimal(x) * 100 for x in sensi]),tuple([Decimal(x) * 100 for x in speci])]
+    t=Table(data, names=('labels','PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values'})
+    print(t)
+    return
     
 category_to_investigate='tumor_subtype'
 file_loc='tumormarkers_lungcancer.csv'
@@ -197,4 +206,4 @@ thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM
 if category_to_investigate=='lung_carcinoma' or category_to_investigate=='primary_tumor':
     PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
     print_stats(PPV,NPV,sensi,speci)
-aucDT=decisionT(dframe,category_to_investigate,save_roc=False)
+aucDT,PPV,NPV,sensitivity,specificity=decisionT(dframe,category_to_investigate,save_roc=False)
