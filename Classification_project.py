@@ -16,13 +16,16 @@ def read_data(file_loc):
 
 def remove_nan_dframe(dframe,class_sort):
     drop_index=[];
+    kept=[];
     (r,c)=dframe.shape
+    column=dframe[class_sort]
     for i in range(0,r):
-        column=dframe[class_sort]
         if isinstance(column[i], float):
             drop_index.append(i)
+        else:
+            kept.append(i)
     dframe=dframe.drop(drop_index,axis=0)
-    return dframe
+    return dframe, kept
 
 def remove_nan_list(lis):
     drop_index=[];
@@ -39,7 +42,7 @@ def remove_nan_list(lis):
     
 def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     if remove==True:
-        dframe=remove_nan_dframe(dframe,class_sort)
+        dframe, kept=remove_nan_dframe(dframe,class_sort)
     cla=dframe[class_sort]
     labels=cla.unique()
     lut = dict(zip(labels, 'rbg'))
@@ -76,32 +79,50 @@ def approach_paper(dframe,thresholds):
     return LC_results
 
 def compare_with_ground(dframe,prediction,category):
-    """under construction"""
-    tru=dframe[category]
-    tru=tru.tolist()
-    tru, kept=remove_nan_list(tru)   
-    ground=[];
-    for i in range(0,len(tru)):
-        if tru[i]=='Yes' or tru[i]=='NSCLC':       #dit is nu te specifiek
-            ground.append(1)
-        if tru[i]=='No' or tru[i]=='SCLC':        #dit is nu te specifiek
-            ground.append(0)
+    """under development"""
+    frame, kept=remove_nan_dframe(dframe,category)
+    tru=frame[category]
     pred_down=[];
     for z in range(0,len(prediction)):
         if z in kept:
             pred_down.append(prediction[z])
-    con = confusion_matrix(ground,pred_down,labels=[0,1])  #het werkt nu tot hier
-    tn, fp, fn, tp = confusion_matrix([0, 1, 0, 1], [1, 1, 1, 0]).ravel()
-    sensitivity=tp/(tp+fn)
-    specificity=tn/(tn+fp)
-    PPV=tp/(tp+fp)
-    NPV=tn/(tn+fn)
-    return PPV,NPV,sensitivity,specificity, con
+            
+    if category=='lung_carcinoma' or category=='primary_tumor':
+        labels=['Yes','No']
+        lut = dict(zip(labels, [1,0]))
+        ground = tru.map(lut)
+        cnf_matrix = confusion_matrix(ground,pred_down,labels=[0,1])  
+        fp = cnf_matrix[0,1]
+        fn = cnf_matrix[1,0]
+        tp = cnf_matrix[1,1]
+        tn = cnf_matrix[0,0]
+        sensitivity=tp/(tp+fn)
+        specificity=tn/(tn+fp)
+        PPV=tp/(tp+fp)
+        NPV=tn/(tn+fn)
+        
+        """
+    if category=='tumor_type' or category=='tumor_subtype':
+        "moet nog gemaakt worden""
+        cnf_matrix=confusion_matrix(ground,pred_down,labels)
+        FP = cnf_matrix.sum(axis=0) - np.diag(cnf_matrix)  
+        FN = cnf_matrix.sum(axis=1) - np.diag(cnf_matrix)
+        TP = np.diag(cnf_matrix)
+        TN = cnf_matrix.sum() - (FP + FN + TP)
+        """
+        
+    return PPV,NPV,sensitivity,specificity, cnf_matrix
+
+def print_stats(PPV,NPV,sensi,speci):
     
+    
+    return
+    
+category_to_investigate='lung_carcinoma'
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
-make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort='primary_tumor')
+make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
-LC_paper=approach_paper(dframe,thresholds)    #hier voorspel ik lung_carcinoma mee
-PPV,NPV,sensi,speci,con=compare_with_ground(dframe,LC_paper,'lung_carcinoma')     #moet dit primary tumor zijn of lung carcinoma??
+LC_paper=approach_paper(dframe,thresholds)    
+PPV,NPV,sensi,speci,cnf=compare_with_ground(dframe,LC_paper,category_to_investigate)     
