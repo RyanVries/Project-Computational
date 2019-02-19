@@ -54,7 +54,7 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     labels=cla.unique()
     lut = dict(zip(labels, 'rbgk')) #create dictionary of possible options
     row_colors = cla.map(lut)
-    markers=dframe.iloc[:,[5,6,7,8,9,10,11]]
+    markers=dframe.iloc[:,5:12]
     g=sns.clustermap(markers, metric='correlation', method='single', col_cluster=False, row_colors=row_colors, z_score=0)
 
     for label in labels:     #add the labels of each patient next to the clustermap
@@ -87,15 +87,16 @@ def approach_paper(dframe,thresholds):
 
 
 def decisionT(dframe,cat,save_roc):
+    '''Set up a decision tree classifier and train this with 75% of the data and evaluate afterwards with the 25% of test data by showing the ROC curve and its AUC'''
     dframe, kept=remove_nan_dframe(dframe,cat)
     labels=dframe[cat].unique()
     length=range(0,len(labels))
     lut = dict(zip(labels, length)) #create dictionary of possible options
-    msk = np.random.rand(len(dframe)) < 0.75
+    msk = np.random.rand(len(dframe)) < 0.75   #split data in train and test
     df_train=dframe[msk]
     y_train=df_train[cat]
     train_res_mapped = y_train.map(lut)
-    markers=dframe.iloc[:,[5,6,7,8,9,10,11]]
+    markers=dframe.iloc[:,5:12]
     train_mark=markers[msk]
     
     clf = tree.DecisionTreeClassifier()
