@@ -114,7 +114,7 @@ def decisionT(dframe,cat,save_roc):
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity=evaluate_stats(test_res_map,predictions)
     print(PPV,NPV,sensitivity,specificity)
-    auc_DT=roc_auc(test_res_map,predictions,cat,save_roc)    #moet nog verandert worden voor multiclass van tumor_subtype
+    auc_DT=roc_auc(test_res_map,predictions,cat,save_roc,lut)    #moet nog verandert worden voor multiclass van tumor_subtype
     return auc_DT
 
 def evaluate_stats(ground,prediction):
@@ -137,7 +137,7 @@ def evaluate_stats(ground,prediction):
         
     return PPV,NPV,sensitivity,specificity
 
-def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category):
+def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label):
     '''display the ROC curve and save if specified'''
     g=plt.figure()
     plt.plot(fpr_keras, tpr_keras, color='darkorange', label='ROC curve (area = %0.2f)' % auc_keras)
@@ -146,35 +146,38 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category):
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic of the class: '+category)
+    if label==False:
+        plt.title('Receiver operating characteristic of the class: '+category)
+    else:
+        plt.title('Receiver operating characteristic of the class: '+category+', with the selected label: '+label)
     plt.legend(loc="lower right")
     plt.show()
     if save_roc==True:      #save the figure if wanted with a unique name to prevent overwriting files
         x=datetime.datetime.now()
-        extra='_'.join([str(x.year),str(x.month),str(x.day),str(x.hour),str(x.minute),str(x.second)])
+        extra='_'.join([category,str(x.year),str(x.month),str(x.day),str(x.hour),str(x.minute),str(x.second)])
         g.savefig('ROC_curve'+extra+'.png')
     return
     
-def roc_auc(y_true,predictions,category,save_roc):
+def roc_auc(y_true,predictions,category,save_roc,dic):
     '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve'''  
     if len(np.unique(y_true))>2 or len(np.unique(predictions))>2:   #######nog mee nezig want werkt niet voor tumor subtype
-        n_classes=max(len(np.unique(y_true)),len(np.unique(predictions)))
         fpr = dict()
         tpr = dict()
         AUC = dict()
-        for i in range(n_classes):
-                fpr[i], tpr[i], _ = roc_curve(y_true[:, i], predictions[:, i])
-                AUC[i] = auc(fpr[i], tpr[i])
-        # Compute micro-average ROC curve and ROC area
-        fpr["micro"], tpr["micro"], _ = roc_curve(y_true.ravel(), predictions.ravel())
-        roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
-        
+        labels=np.unique(y_true)
+        for label in labels:
+                fpr[label], tpr[label], _ = roc_curve(y_true, predictions,pos_label=label)
+                AUC[label] = auc(fpr[label], tpr[label])
+                for s, n in dic.items():
+                    if n==label:
+                        label_string=s
+                print_roc(fpr[label],tpr[label],AUC[label],save_roc,category,label_string)
+        return AUC
     else:
         fpr_keras, tpr_keras, _ = roc_curve(y_true, predictions)
         auc_keras = auc(fpr_keras, tpr_keras)
-        print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category)
-        
-    return auc_keras 
+        print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label=False) 
+        return auc_keras 
     
     
 def print_stats(PPV,NPV,sensi,speci):
