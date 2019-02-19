@@ -7,7 +7,7 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 import datetime
-import sklearn
+from astropy.table import Table, Column
 from sklearn.metrics import confusion_matrix
 
 def read_data(file_loc):
@@ -78,7 +78,7 @@ def approach_paper(dframe,thresholds):
     
     return LC_results
 
-def compare_with_ground(dframe,prediction,category):
+def compare_with_ground_basic(dframe,prediction,category):
     """under development"""
     frame, kept=remove_nan_dframe(dframe,category)
     tru=frame[category]
@@ -86,36 +86,27 @@ def compare_with_ground(dframe,prediction,category):
     for z in range(0,len(prediction)):
         if z in kept:
             pred_down.append(prediction[z])
-            
-    if category=='lung_carcinoma' or category=='primary_tumor':
-        labels=['Yes','No']
-        lut = dict(zip(labels, [1,0]))
-        ground = tru.map(lut)
-        cnf_matrix = confusion_matrix(ground,pred_down,labels=[0,1])  
-        fp = cnf_matrix[0,1]
-        fn = cnf_matrix[1,0]
-        tp = cnf_matrix[1,1]
-        tn = cnf_matrix[0,0]
-        sensitivity=tp/(tp+fn)
-        specificity=tn/(tn+fp)
-        PPV=tp/(tp+fp)
-        NPV=tn/(tn+fn)
-        
-        """
-    if category=='tumor_type' or category=='tumor_subtype':
-        "moet nog gemaakt worden""
-        cnf_matrix=confusion_matrix(ground,pred_down,labels)
-        FP = cnf_matrix.sum(axis=0) - np.diag(cnf_matrix)  
-        FN = cnf_matrix.sum(axis=1) - np.diag(cnf_matrix)
-        TP = np.diag(cnf_matrix)
-        TN = cnf_matrix.sum() - (FP + FN + TP)
-        """
+    
+    labels=['Yes','No']
+    lut = dict(zip(labels, [1,0]))
+    ground = tru.map(lut)
+    cnf_matrix = confusion_matrix(ground,pred_down,labels=[0,1])  
+    fp = cnf_matrix[0,1]
+    fn = cnf_matrix[1,0]
+    tp = cnf_matrix[1,1]
+    tn = cnf_matrix[0,0]
+    sensitivity=tp/(tp+fn)
+    specificity=tn/(tn+fp)
+    PPV=tp/(tp+fp)
+    NPV=tn/(tn+fn)
         
     return PPV,NPV,sensitivity,specificity, cnf_matrix
 
 def print_stats(PPV,NPV,sensi,speci):
-    
-    
+    values='{:.2f} {:.2f} {:.2f} {:.2f}'.format(100*PPV,100*NPV,100*sensi,100*speci)
+    values=values.split()
+    t=Table([[float(values[0])],[float(values[1])],[float(values[2])],[float(values[3])]],names=('PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values'})
+    print(t)
     return
     
 category_to_investigate='lung_carcinoma'
@@ -125,4 +116,5 @@ make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 LC_paper=approach_paper(dframe,thresholds)    
-PPV,NPV,sensi,speci,cnf=compare_with_ground(dframe,LC_paper,category_to_investigate)     
+PPV,NPV,sensi,speci,cnf=compare_with_ground_basic(dframe,LC_paper,category_to_investigate)     
+print_stats(PPV,NPV,sensi,speci)
