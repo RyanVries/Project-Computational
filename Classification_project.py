@@ -86,12 +86,12 @@ def approach_paper(dframe,thresholds):
     return LC_results
 
 
-def decisionT(dframe,cat):
+def decisionT(dframe,cat,save_roc):
     dframe, kept=remove_nan_dframe(dframe,cat)
     labels=dframe[cat].unique()
-    lengte=range(0,len(labels))
-    lut = dict(zip(labels, lengte)) #create dictionary of possible options
-    msk = np.random.rand(len(dframe)) < 0.9
+    length=range(0,len(labels))
+    lut = dict(zip(labels, length)) #create dictionary of possible options
+    msk = np.random.rand(len(dframe)) < 0.75
     df_train=dframe[msk]
     y_train=df_train[cat]
     train_res_mapped = y_train.map(lut)
@@ -106,7 +106,7 @@ def decisionT(dframe,cat):
     test_res_map=y_test.map(lut)
     test_mark=markers[~msk]
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
-    auc_DT=roc_auc(test_res_map,predictions,cat,False)
+    auc_DT=roc_auc(test_res_map,predictions,cat,save_roc)
     return auc_DT
 
 def compare_with_ground_binary(dframe,prediction,category):
@@ -166,7 +166,7 @@ def print_stats(PPV,NPV,sensi,speci):
     print(t)
     return
     
-category_to_investigate='primary_tumor'
+category_to_investigate='lung_carcinoma'
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
@@ -175,3 +175,4 @@ thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM
 LC_paper=approach_paper(dframe,thresholds)    
 PPV,NPV,sensi,speci,cnf=compare_with_ground_binary(dframe,LC_paper,category_to_investigate)     
 print_stats(PPV,NPV,sensi,speci)
+aucDT=decisionT(dframe,category_to_investigate,save_roc=False)
