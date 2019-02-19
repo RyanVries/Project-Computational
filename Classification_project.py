@@ -11,8 +11,7 @@ from astropy.table import Table
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 from sklearn import tree
 from sklearn.model_selection import train_test_split
-import graphviz
-import numpy as np
+
 
 def read_data(file_loc):
     '''read the desired data from the csv file as a dataframe'''
@@ -69,8 +68,9 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
         g.savefig('clustermap'+extra+'.png')
     return
 
-def approach_paper(dframe,thresholds):
+def approach_paper(dframe,thresholds,category):
     """use the specified thresholds from the paper to classify each patient (LC=1 and no LC=0)"""
+    dframe, kept=remove_nan_dframe(dframe,category)
     (rows,columns)=dframe.shape
     LC_index=[];
     LC_results=[];
@@ -83,8 +83,15 @@ def approach_paper(dframe,thresholds):
                     LC_results.append(1)
         if pat not in LC_index:
             LC_results.append(0)
+    predictions=LC_results
     
-    return LC_results
+    truth=dframe[category]
+    labels=['Yes','No']
+    lut = dict(zip(labels, [1,0]))
+    ground = truth.map(lut)
+    gr=ground.tolist()
+    PPV,NPV,sensitivity,specificity=compare_with_ground_binary(gr,predictions)
+    return PPV,NPV,sensitivity,specificity
 
 
 def decisionT(dframe,cat,save_roc):
@@ -105,21 +112,12 @@ def decisionT(dframe,cat,save_roc):
     test_res_map=y_test.map(lut)
     test_mark=X_test
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
-    auc_DT=roc_auc(test_res_map,predictions,cat,save_roc)
+    auc_DT=roc_auc(test_res_map,predictions,cat,save_roc)    #moet nog verandert worden voor multiclass van tumor_subtype
     return auc_DT
 
-def compare_with_ground_binary(dframe,prediction,category):
+def compare_with_ground_binary(ground,prediction):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
-    frame, kept=remove_nan_dframe(dframe,category)
-    tru=frame[category]
-    pred_down=[];
-    for z in range(0,len(prediction)):   #only keep the prediction if the true value is known
-        if z in kept:
-            pred_down.append(prediction[z])
-    labels=['Yes','No']
-    lut = dict(zip(labels, [1,0]))
-    ground = tru.map(lut)
-    cnf_matrix = confusion_matrix(ground,pred_down,labels=[0,1])  
+    cnf_matrix = confusion_matrix(ground,prediction)  
     fp = cnf_matrix[0,1]
     fn = cnf_matrix[1,0]
     tp = cnf_matrix[1,1]
@@ -129,7 +127,7 @@ def compare_with_ground_binary(dframe,prediction,category):
     PPV=tp/(tp+fp)
     NPV=tn/(tn+fn)
         
-    return PPV,NPV,sensitivity,specificity, cnf_matrix
+    return PPV,NPV,sensitivity,specificity
 
 def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category):
     '''display the ROC curve and save if specified'''
@@ -171,7 +169,6 @@ dframe=read_data(file_loc)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
-LC_paper=approach_paper(dframe,thresholds)    
-PPV,NPV,sensi,speci,cnf=compare_with_ground_binary(dframe,LC_paper,category_to_investigate)     
+PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
 print_stats(PPV,NPV,sensi,speci)
 aucDT=decisionT(dframe,category_to_investigate,save_roc=False)
