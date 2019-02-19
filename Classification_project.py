@@ -82,7 +82,7 @@ def approach_paper(dframe,thresholds):
     
     return LC_results
 
-def compare_with_ground_basic(dframe,prediction,category):
+def compare_with_ground_binary(dframe,prediction,category):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
     frame, kept=remove_nan_dframe(dframe,category)
     tru=frame[category]
@@ -105,7 +105,8 @@ def compare_with_ground_basic(dframe,prediction,category):
         
     return PPV,NPV,sensitivity,specificity, cnf_matrix
 
-def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc):
+def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category):
+    '''display the ROC curve and save if specified'''
     g=plt.figure()
     plt.plot(fpr_keras, tpr_keras, color='darkorange', label='ROC curve (area = %0.2f)' % auc_keras)
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
@@ -113,7 +114,7 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc):
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic')
+    plt.title('Receiver operating characteristic of the class: '+category)
     plt.legend(loc="lower right")
     plt.show()
     if save_roc==True:      #save the figure if wanted with a unique name to prevent overwriting files
@@ -122,10 +123,17 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc):
         g.savefig('ROC_curve'+extra+'.png')
     return
     
-def roc_auc(y_true,y_pred,save_roc):
-    fpr_keras, tpr_keras, thresholds_keras = roc_curve(y_true, y_pred)
+def roc_auc(dframe,prediction,category,save_roc):
+    '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve'''
+    frame, kept=remove_nan_dframe(dframe,category)
+    y_true=frame[category]
+    pred_down=[];
+    for z in range(0,len(prediction)):   #only keep the prediction if the true value is known
+        if z in kept:
+            pred_down.append(prediction[z])  
+    fpr_keras, tpr_keras, thresholds_keras = roc_curve(y_true, pred_down)
     auc_keras = auc(fpr_keras, tpr_keras)
-    print_roc(fpr_keras, tpr_keras,auc_keras,save_roc)
+    print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category)
     return auc_keras 
     
     
@@ -144,5 +152,5 @@ make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 LC_paper=approach_paper(dframe,thresholds)    
-PPV,NPV,sensi,speci,cnf=compare_with_ground_basic(dframe,LC_paper,category_to_investigate)     
+PPV,NPV,sensi,speci,cnf=compare_with_ground_binary(dframe,LC_paper,category_to_investigate)     
 print_stats(PPV,NPV,sensi,speci)
