@@ -7,7 +7,7 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 import datetime
-from astropy.table import Table, Column
+from astropy.table import Table
 from sklearn.metrics import confusion_matrix
 
 def read_data(file_loc):
@@ -22,7 +22,7 @@ def remove_nan_dframe(dframe,class_sort):
     (r,c)=dframe.shape
     column=dframe[class_sort]
     for i in range(0,r):
-        if isinstance(column[i], float):    #a Nan is classified as a float in python
+        if isinstance(column[i], float) or column[i]=='Niet bekend':    #a Nan is classified as a float in python
             drop_index.append(i)
         else:
             kept.append(i)
@@ -49,7 +49,7 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
         dframe, kept=remove_nan_dframe(dframe,class_sort)
     cla=dframe[class_sort]
     labels=cla.unique()
-    lut = dict(zip(labels, 'rbg')) #create dictionary of possible options
+    lut = dict(zip(labels, 'rbgk')) #create dictionary of possible options
     row_colors = cla.map(lut)
     markers=dframe.iloc[:,[5,6,7,8,9,10,11]]
     g=sns.clustermap(markers, metric='correlation', method='single', col_cluster=False, row_colors=row_colors, z_score=0)
@@ -57,7 +57,7 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     for label in labels:     #add the labels of each patient next to the clustermap
         g.ax_col_dendrogram.bar(0, 0, color=lut[label],
                             label=label, linewidth=0)
-    g.ax_col_dendrogram.legend(loc='center', ncol=len(labels))
+    g.ax_col_dendrogram.legend(loc='center', ncol=3)
     g.ax_heatmap.set_title('Clustermap of the protein biomarkers with labels of the different known '+str(class_sort)+' classes')
     if save_fig==True:      #save the figure if wanted with a unique name to prevent overwriting files
         x=datetime.datetime.now()
@@ -113,7 +113,7 @@ def print_stats(PPV,NPV,sensi,speci):
     print(t)
     return
     
-category_to_investigate='lung_carcinoma'
+category_to_investigate='primary_tumor'
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
