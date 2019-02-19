@@ -36,7 +36,7 @@ def remove_nan_list(lis):
         del lis[index]          
     return lis, kept
     
-def make_cluster(dframe,remove,save_fig,class_sort='lung_carcinoma'):
+def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     if remove==True:
         dframe=remove_nan_dframe(dframe)
     cla=dframe[class_sort]
@@ -100,7 +100,7 @@ def compare_with_ground(dframe,prediction,category):
     
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
-make_cluster(dframe=dframe, remove=True, save_fig=False, class_sort='lung_carcinoma')
+make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort='lung_carcinoma')
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 LC_paper=approach_paper(dframe,thresholds)
