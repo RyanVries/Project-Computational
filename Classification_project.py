@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 import datetime
 from astropy.table import Table
 from sklearn.metrics import confusion_matrix, roc_curve, auc
+from sklearn import tree
+import graphviz
+import numpy as np
 
 def read_data(file_loc):
     '''read the desired data from the csv file as a dataframe'''
@@ -82,6 +85,30 @@ def approach_paper(dframe,thresholds):
     
     return LC_results
 
+
+def decisionT(dframe,cat):
+    dframe, kept=remove_nan_dframe(dframe,cat)
+    labels=dframe[cat].unique()
+    lengte=range(0,len(labels))
+    lut = dict(zip(labels, lengte)) #create dictionary of possible options
+    msk = np.random.rand(len(dframe)) < 0.9
+    df_train=dframe[msk]
+    y_train=df_train[cat]
+    train_res_mapped = y_train.map(lut)
+    markers=dframe.iloc[:,[5,6,7,8,9,10,11]]
+    train_mark=markers[msk]
+    
+    clf = tree.DecisionTreeClassifier()
+    clf.fit(train_mark.values,train_res_mapped)
+    
+    df_test=dframe[~msk]
+    y_test=df_test[cat]
+    test_res_map=y_test.map(lut)
+    test_mark=markers[~msk]
+    predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
+    auc_DT=roc_auc(test_res_map,predictions,cat,False)
+    return auc_DT
+
 def compare_with_ground_binary(dframe,prediction,category):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
     frame, kept=remove_nan_dframe(dframe,category)
@@ -123,15 +150,9 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category):
         g.savefig('ROC_curve'+extra+'.png')
     return
     
-def roc_auc(dframe,prediction,category,save_roc):
-    '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve'''
-    frame, kept=remove_nan_dframe(dframe,category)
-    y_true=frame[category]
-    pred_down=[];
-    for z in range(0,len(prediction)):   #only keep the prediction if the true value is known
-        if z in kept:
-            pred_down.append(prediction[z])  
-    fpr_keras, tpr_keras, thresholds_keras = roc_curve(y_true, pred_down)
+def roc_auc(y_true,predictions,category,save_roc):
+    '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve''' 
+    fpr_keras, tpr_keras, thresholds_keras = roc_curve(y_true, predictions)
     auc_keras = auc(fpr_keras, tpr_keras)
     print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category)
     return auc_keras 
