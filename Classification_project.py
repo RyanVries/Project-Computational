@@ -8,9 +8,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import datetime
 from astropy.table import Table
-from sklearn.metrics import confusion_matrix, roc_curve, auc
+from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report
 from sklearn import tree
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_validate
 import numpy as np
 from decimal import getcontext, Decimal
 
@@ -56,7 +56,8 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     lut = dict(zip(labels, 'rbgk')) #create dictionary of possible options
     row_colors = cla.map(lut)
     markers=dframe.iloc[:,5:12]
-    g=sns.clustermap(markers, metric='correlation', method='single', col_cluster=False, row_colors=row_colors, z_score=0)
+    cmap = sns.diverging_palette(250, 10, n=9, as_cmap=True)
+    g=sns.clustermap(markers, cmap=cmap, metric='euclidean', method='single', col_cluster=False, row_colors=row_colors, z_score=1)
 
     for label in labels:     #add the labels of each patient next to the clustermap
         g.ax_col_dendrogram.bar(0, 0, color=lut[label],
@@ -91,7 +92,7 @@ def approach_paper(dframe,thresholds,category):
     lut = dict(zip(labels, [1,0]))
     ground = truth.map(lut)
     gr=ground.tolist()
-    PPV,NPV,sensitivity,specificity=evaluate_stats(gr,predictions)
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)
     return PPV,NPV,sensitivity,specificity
 
 
@@ -109,17 +110,22 @@ def decisionT(dframe,cat,save_roc):
     train_mark=X_train
     clf = tree.DecisionTreeClassifier()
     clf.fit(train_mark.values,train_res_mapped)
-    
+    score=cross_validate(clf,markers,y_true.map(lut),cv=10)
+    std=np.std(score['test_score'])
+    mn=np.mean(score['test_score'])
+    CV_score={'mean':mn,'std':std}
     test_res_map=y_test.map(lut)
     test_mark=X_test
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
-    PPV,NPV,sensitivity,specificity=evaluate_stats(test_res_map,predictions)
-    auc_DT=roc_auc(test_res_map,predictions,cat,save_roc,lut)    #moet nog verandert worden voor multiclass van tumor_subtype
-    
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels)
-    return auc_DT,PPV,NPV,sensitivity,specificity
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(test_res_map,predictions,labels)
+    auc_DT=roc_auc(test_res_map,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    
+    if isinstance(PPV,float):
+        print_stats(PPV,NPV,sensitivity,specificity)
+    else:
+        print_stats_adv(PPV,NPV,sensitivity,specificity,labels)
+    return auc_DT,PPV,NPV,sensitivity,specificity, CV_score
 
-def evaluate_stats(ground,prediction):
+def evaluate_stats(ground,prediction,labels):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
     cnf_matrix = confusion_matrix(ground,prediction)
     if len(np.unique(ground))>2 or len(np.unique(prediction))>2:   
@@ -132,14 +138,15 @@ def evaluate_stats(ground,prediction):
         fn = cnf_matrix[1,0]
         tp = cnf_matrix[1,1]
         tn = cnf_matrix[0,0]
+    report=classification_report(ground,prediction,target_names=labels)
     sensitivity=tp/(tp+fn)
     specificity=tn/(tn+fp)
     PPV=tp/(tp+fp)
     NPV=tn/(tn+fn)
         
-    return PPV,NPV,sensitivity,specificity
+    return PPV,NPV,sensitivity,specificity,report
 
-def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label):
+def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label,classifier):
     '''display the ROC curve and save if specified'''
     g=plt.figure()
     plt.plot(fpr_keras, tpr_keras, color='darkorange', label='ROC curve (area = %0.2f)' % auc_keras)
@@ -149,9 +156,9 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     if label==False:
-        plt.title('Receiver operating characteristic of the class: '+category)
+        plt.title('Receiver operating characteristic of the ' +classifier+' for the class: '+category)
     else:
-        plt.title('Receiver operating characteristic of the class: '+category+', with the selected label: '+label)
+        plt.title('Receiver operating characteristic of the ' +classifier+' for the class: '+category+', with the selected label: '+label)
     plt.legend(loc="lower right")
     plt.show()
     if save_roc==True:      #save the figure if wanted with a unique name to prevent overwriting files
@@ -160,9 +167,9 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label):
         g.savefig('ROC_curve'+extra+'.png')
     return
     
-def roc_auc(y_true,predictions,category,save_roc,dic):
+def roc_auc(y_true,predictions,category,save_roc,dic,classifier):
     '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve'''  
-    if len(np.unique(y_true))>2 or len(np.unique(predictions))>2:   #######nog mee nezig want werkt niet voor tumor subtype
+    if len(np.unique(y_true))>2 or len(np.unique(predictions))>2:   
         fpr = dict()
         tpr = dict()
         AUC = dict()
@@ -173,12 +180,12 @@ def roc_auc(y_true,predictions,category,save_roc,dic):
                 for s, n in dic.items():
                     if n==label:
                         label_string=s
-                print_roc(fpr[label],tpr[label],AUC[label],save_roc,category,label_string)
+                print_roc(fpr[label],tpr[label],AUC[label],save_roc,category,label_string,classifier)
         return AUC
     else:
         fpr_keras, tpr_keras, _ = roc_curve(y_true, predictions)
         auc_keras = auc(fpr_keras, tpr_keras)
-        print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label=False) 
+        print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,False,classifier) 
         return auc_keras 
     
     
@@ -197,7 +204,7 @@ def print_stats_adv(PPV,NPV,sensi,speci,labels):
     print(t)
     return
     
-category_to_investigate='tumor_subtype'
+category_to_investigate='lung_carcinoma'
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
@@ -206,4 +213,4 @@ thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM
 if category_to_investigate=='lung_carcinoma' or category_to_investigate=='primary_tumor':
     PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
     print_stats(PPV,NPV,sensi,speci)
-aucDT,PPV,NPV,sensitivity,specificity=decisionT(dframe,category_to_investigate,save_roc=False)
+aucDT,PPV,NPV,sensitivity,specificity, CV_score=decisionT(dframe,category_to_investigate,save_roc=False)
