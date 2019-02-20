@@ -28,6 +28,7 @@ def remove_nan_dframe(dframe,class_sort):
     kept=[];
     (r,c)=dframe.shape
     column=dframe[class_sort]
+    print(type(column))
     for i in range(0,r):
         if isinstance(column[i], float) or column[i]=='Niet bekend':    #a Nan is classified as a float in python
             drop_index.append(i)
@@ -214,7 +215,7 @@ def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
     print(t)
     return
     
-category_to_investigate='lung_carcinoma'
+category_to_investigate='tumor_subtype'
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
