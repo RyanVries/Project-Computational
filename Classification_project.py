@@ -10,9 +10,12 @@ import datetime
 from astropy.table import Table
 from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report
 from sklearn import tree
-from sklearn.model_selection import train_test_split, cross_validate
+from sklearn.model_selection import train_test_split, cross_val_score
 import numpy as np
-from decimal import getcontext, Decimal
+from decimal import getcontext, Decimal  
+from sklearn.tree import export_graphviz
+
+
 
 def read_data(file_loc):
     '''read the desired data from the csv file as a dataframe'''
@@ -95,6 +98,9 @@ def approach_paper(dframe,thresholds,category):
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)
     return PPV,NPV,sensitivity,specificity
 
+def visualize_DT(dtree,feature_names,class_names):
+    export_graphviz(dtree, out_file='tree.png', feature_names = feature_names,class_names = class_names,rounded = True, proportion = False, precision = 2, filled = True)
+    return 
 
 def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train this with 75% of the data and evaluate afterwards with the 25% of test data by showing the ROC curve and its AUC'''
@@ -110,9 +116,11 @@ def decisionT(dframe,cat,save_roc):
     train_mark=X_train
     clf = tree.DecisionTreeClassifier()
     clf.fit(train_mark.values,train_res_mapped)
-    score=cross_validate(clf,markers,y_true.map(lut),cv=10)
-    std=np.std(score['test_score'])
-    mn=np.mean(score['test_score'])
+    #visualize_DT(clf,dframe.columns[5:12],labels)
+    
+    score=cross_val_score(clf,markers,y_true.map(lut),cv=5,scoring='roc_auc')
+    std=np.std(score)
+    mn=np.mean(score)
     CV_score={'mean':mn,'std':std}
     test_res_map=y_test.map(lut)
     test_mark=X_test
@@ -216,3 +224,4 @@ if category_to_investigate=='lung_carcinoma' or category_to_investigate=='primar
     PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
     print_stats(PPV,NPV,sensi,speci,'Thresholds paper',category_to_investigate)
 aucDT,PPV,NPV,sensitivity,specificity, CV_score=decisionT(dframe,category_to_investigate,save_roc=False)
+print(CV_score)
