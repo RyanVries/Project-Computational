@@ -28,7 +28,6 @@ def remove_nan_dframe(dframe,class_sort):
     kept=[];
     (r,c)=dframe.shape
     column=dframe[class_sort]
-    print(type(column))
     for i in range(0,r):
         if isinstance(column[i], float) or column[i]=='Niet bekend':    #a Nan is classified as a float in python
             drop_index.append(i)
@@ -92,11 +91,12 @@ def approach_paper(dframe,thresholds,category):
     predictions=LC_results
     
     truth=dframe[category]
-    labels=['Yes','No']
-    lut = dict(zip(labels, [1,0]))
+    labels=['No','Yes']
+    lut = dict(zip(labels, [0,1]))
     ground = truth.map(lut)
     gr=ground.tolist()
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)
+    print_stats_adv(PPV,NPV,sensi,speci,labels,'Thresholds paper',category_to_investigate)
     return PPV,NPV,sensitivity,specificity
 
 def visualize_DT(dtree,feature_names,class_names):
@@ -128,25 +128,17 @@ def decisionT(dframe,cat,save_roc):
     predictions=clf.predict(test_mark.values)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(test_res_map,predictions,labels)
     auc_DT=roc_auc(test_res_map,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    
-    if isinstance(PPV,float):
-        print_stats(PPV,NPV,sensitivity,specificity,'Decision Tree classifier',cat)
-    else:
-        print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Decision Tree classifier',cat)
+    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Decision Tree classifier',cat)
     return auc_DT,PPV,NPV,sensitivity,specificity, CV_score
 
 def evaluate_stats(ground,prediction,labels):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
     cnf_matrix = confusion_matrix(ground,prediction)
-    if len(np.unique(ground))>2 or len(np.unique(prediction))>2:   
-        fp = cnf_matrix.sum(axis=0) - np.diag(cnf_matrix)  
-        fn = cnf_matrix.sum(axis=1) - np.diag(cnf_matrix)
-        tp = np.diag(cnf_matrix)
-        tn = np.sum(cnf_matrix,axis=(0,1)) - (fp + fn + tp) 
-    else:
-        fp = cnf_matrix[0,1]
-        fn = cnf_matrix[1,0]
-        tp = cnf_matrix[1,1]
-        tn = cnf_matrix[0,0]
+    fp = cnf_matrix.sum(axis=0) - np.diag(cnf_matrix)  
+    fn = cnf_matrix.sum(axis=1) - np.diag(cnf_matrix)
+    tp = np.diag(cnf_matrix)
+    tn = np.sum(cnf_matrix,axis=(0,1)) - (fp + fn + tp) 
+    
     report=classification_report(ground,prediction,target_names=labels)
     sensitivity=tp/(tp+fn)
     specificity=tn/(tn+fp)
@@ -208,6 +200,7 @@ def print_stats(PPV,NPV,sensi,speci,classifier,category):
     return
 
 def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
+    '''shows for each label the relevant statistical values. where the label is seen as the positive on the stated row'''
     getcontext().prec = 4
     data=[tuple(labels),tuple([Decimal(x) * 100 for x in PPV]),tuple([Decimal(x) * 100 for x in NPV]),tuple([Decimal(x) * 100 for x in sensi]),tuple([Decimal(x) * 100 for x in speci])]
     t=Table(data, names=('labels','PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values for the '+classifier+' of the class: '+category})
@@ -215,7 +208,7 @@ def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
     print(t)
     return
     
-category_to_investigate='tumor_subtype'
+category_to_investigate='lung_carcinoma'
 file_loc='tumormarkers_lungcancer.csv'
 dframe=read_data(file_loc)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
@@ -223,6 +216,5 @@ make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 if category_to_investigate=='lung_carcinoma' or category_to_investigate=='primary_tumor':
     PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
-    print_stats(PPV,NPV,sensi,speci,'Thresholds paper',category_to_investigate)
 aucDT,PPV,NPV,sensitivity,specificity, CV_score=decisionT(dframe,category_to_investigate,save_roc=False)
 print(CV_score)
