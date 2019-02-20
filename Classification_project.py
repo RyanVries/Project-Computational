@@ -120,9 +120,9 @@ def decisionT(dframe,cat,save_roc):
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(test_res_map,predictions,labels)
     auc_DT=roc_auc(test_res_map,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    
     if isinstance(PPV,float):
-        print_stats(PPV,NPV,sensitivity,specificity)
+        print_stats(PPV,NPV,sensitivity,specificity,'Decision Tree classifier',cat)
     else:
-        print_stats_adv(PPV,NPV,sensitivity,specificity,labels)
+        print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Decision Tree classifier',cat)
     return auc_DT,PPV,NPV,sensitivity,specificity, CV_score
 
 def evaluate_stats(ground,prediction,labels):
@@ -189,18 +189,20 @@ def roc_auc(y_true,predictions,category,save_roc,dic,classifier):
         return auc_keras 
     
     
-def print_stats(PPV,NPV,sensi,speci):
+def print_stats(PPV,NPV,sensi,speci,classifier,category):
     'Make a tabel of the relevant statistical values and print this'''
     values='{:.2f} {:.2f} {:.2f} {:.2f}'.format(100*PPV,100*NPV,100*sensi,100*speci)
     values=values.split()
-    t=Table([[float(values[0])],[float(values[1])],[float(values[2])],[float(values[3])]],names=('PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values'})
+    t=Table([[float(values[0])],[float(values[1])],[float(values[2])],[float(values[3])]],names=('PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values for the '+classifier+' of the class: '+category})
+    print(t.meta['name'])
     print(t)
     return
 
-def print_stats_adv(PPV,NPV,sensi,speci,labels):
+def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
     getcontext().prec = 4
     data=[tuple(labels),tuple([Decimal(x) * 100 for x in PPV]),tuple([Decimal(x) * 100 for x in NPV]),tuple([Decimal(x) * 100 for x in sensi]),tuple([Decimal(x) * 100 for x in speci])]
-    t=Table(data, names=('labels','PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values'})
+    t=Table(data, names=('labels','PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values for the '+classifier+' of the class: '+category})
+    print(t.meta['name'])
     print(t)
     return
     
@@ -212,5 +214,5 @@ make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 if category_to_investigate=='lung_carcinoma' or category_to_investigate=='primary_tumor':
     PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
-    print_stats(PPV,NPV,sensi,speci)
+    print_stats(PPV,NPV,sensi,speci,'Thresholds paper',category_to_investigate)
 aucDT,PPV,NPV,sensitivity,specificity, CV_score=decisionT(dframe,category_to_investigate,save_roc=False)
