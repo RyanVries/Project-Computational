@@ -144,7 +144,7 @@ def det_CVscore(clf,markers,y_true):
 
 def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train it after which predictions are made for the test set and statistics for this classification are calculated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,False,False) #prepare the data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
     clf = tree.DecisionTreeClassifier(random_state=1) #initialization of the classifier
     clf.fit(X_train,y_train)  #fit classifier to training data
     #visualize_DT(clf,dframe.columns[5:12],labels)
