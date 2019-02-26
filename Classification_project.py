@@ -16,6 +16,8 @@ import numpy as np
 from decimal import getcontext, Decimal  
 from sklearn.tree import export_graphviz
 import graphviz
+import collections
+from imblearn.over_sampling import SMOTE
 
 
 def read_data(file_loc):
@@ -107,54 +109,60 @@ def visualize_DT(dtree,feature_names,class_names):
     graphviz.render('dot','png','C:/Users/s164616/Documents/MATLAB/Project Computational Biology')
     return 
 
-def prepare_data(dframe,cat,normalize):
+def prepare_data(dframe,cat,normalize,smote):
     dframe, kept=remove_nan_dframe(dframe,cat)
     labels=dframe[cat].unique()
     length=range(0,len(labels))
     lut = dict(zip(labels, length)) #create dictionary of possible options
     markers=dframe.iloc[:,5:12]
+    y_true=dframe[cat]
+    y_true=y_true.map(lut)
+    
+    if smote==True:
+        sm = SMOTE(random_state=42)
+        name=markers.columns
+        markers,y_true=sm.fit_resample(markers.values,y_true)
+        markers=pd.DataFrame(markers,columns=name)
     
     if normalize==True:
         markers = pd.DataFrame(preprocessing.normalize(markers.values),columns=markers.columns)
     
-    y_true=dframe[cat]
-    X_train, X_test, y_train, y_test = train_test_split(markers, y_true, test_size=0.2)
-    y_train = y_train.map(lut)
-    y_test=y_test.map(lut)
-    y_true=y_true.map(lut)
+    X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2, random_state=1)
     
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
-def decisionT(dframe,cat,save_roc):
-    '''Set up a decision tree classifier and train this with 75% of the data and evaluate afterwards with the 25% of test data by showing the ROC curve and its AUC'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,False)
-    clf = tree.DecisionTreeClassifier()
-    clf.fit(X_train.values,y_train)
-    #visualize_DT(clf,dframe.columns[5:12],labels)
-    
+def det_CVscore(clf,markers,y_true):
     score=cross_val_score(clf,markers,y_true,cv=5,scoring='roc_auc')
     std=np.std(score)
     mn=np.mean(score)
     CV_score={'mean':mn,'std':std}
+    return CV_score
     
-    predictions=clf.predict(X_test.values)       #use reshape(1,-1) on the array when predicting a single array
+
+def decisionT(dframe,cat,save_roc):
+    '''Set up a decision tree classifier and train this with 75% of the data and evaluate afterwards with the 25% of test data by showing the ROC curve and its AUC'''
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,False,False)
+    clf = tree.DecisionTreeClassifier()
+    clf.fit(X_train,y_train)
+    #visualize_DT(clf,dframe.columns[5:12],labels)
+
+    CV_score=det_CVscore(clf,markers.values,y_true)
+    
+    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)
     auc_DT=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Decision Tree classifier',cat)
     return auc_DT,PPV,NPV,sensitivity,specificity, report, CV_score
 
 def Logistic_clas(dframe,cat,save_roc):
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,True)
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,True,True)
     
-    clf = LogisticRegression(solver='liblinear',multi_class='ovr')    #geeft nu alleen maar 0'en als predictions
-    clf.fit(X_train.values,y_train)
+    clf = LogisticRegression(penalty='l2',solver='sag',random_state=1)    #geeft nu alleen maar 0'en als predictions
+    clf.fit(X_train,y_train)
     
-    score=cross_val_score(clf,markers,y_true,cv=5,scoring='roc_auc')
-    std=np.std(score)
-    mn=np.mean(score)
-    CV_score={'mean':mn,'std':std}
+    CV_score=det_CVscore(clf,markers.values,y_true)
 
-    predictions=clf.predict(X_test.values)       #use reshape(1,-1) on the array when predicting a single array
+    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)
     auc_LC=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Logistic Regression classifier')    
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Logistic Regression classifier',cat)
@@ -246,5 +254,4 @@ thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM
 if category_to_investigate=='lung_carcinoma':
     PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
 aucDT,PPV,NPV,sensitivity,specificity, report, CV_score=decisionT(dframe,category_to_investigate,save_roc=False)
-aucLC,PPV,NPV,sensitivity,specificity, report, CV_score=Logistic_clas(dframe,category_to_investigate,save_roc=False)
-print(CV_score)
+aucLC,PPV2,NPV2,sensitivity2,specificity2, report2, CV_score2=Logistic_clas(dframe,category_to_investigate,save_roc=False)
