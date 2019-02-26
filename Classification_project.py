@@ -120,7 +120,7 @@ def prepare_data(dframe,cat,normalize,smote):
     markers=dframe.iloc[:,5:12] #TM
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
     
-    if smote==True:     #apply synthetic Minority Over-sampling if specified
+    if smote==True:     #apply synthetic Minority Over-sampling if specified (usually for skewed data distribution)
         sm = SMOTE(random_state=42)   #initialization
         name=markers.columns   #names of the TM's
         markers,y_true=sm.fit_resample(markers.values,y_true)  #apply operationa and provide new data
