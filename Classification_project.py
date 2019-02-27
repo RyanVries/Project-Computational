@@ -29,6 +29,7 @@ def remove_nan_dframe(dframe,class_sort):
     drop_index=[]; #will contain all indexes which will have to be removed
     kept=[];  #will contain all kept indexes 
     (r,c)=dframe.shape
+    name=dframe.columns
     column=dframe[class_sort]   #select column which will have to be evaluated
     for i in range(0,r):  #look at each seperate patient
         for marker in range(6,13):
@@ -39,6 +40,7 @@ def remove_nan_dframe(dframe,class_sort):
         else:
             kept.append(i)    #if not a Nan the index will be kept
     dframe=dframe.drop(drop_index,axis=0)   #drop all Nan indexes
+    dframe=pd.DataFrame(dframe,columns=name)
     return dframe, kept
 
 def remove_nan_markers(dframe):
@@ -143,7 +145,7 @@ def optimal_thres(dframe,category='lung_carcinoma'):
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
     optimal=dict()   #dictionary to store the best threshold values
-    for mi,marker in enumerate(range(5,12)):  #look at each marker separately
+    for mi,marker in enumerate(range(6,13)):  #look at each marker separately
         for index,thres in enumerate(threshold):   #loop over all of the possible threshold values
             LC_result=np.zeros(rows)  #make room in memory for classification
             for pat in range(0,rows):   #look at each patient
