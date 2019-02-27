@@ -11,7 +11,7 @@ from astropy.table import Table
 from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report
 from sklearn import tree, preprocessing
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 import numpy as np
 from decimal import getcontext, Decimal  
 from sklearn.tree import export_graphviz
@@ -143,6 +143,55 @@ def optimal_thres(dframe,category='lung_carcinoma'):
     plot_optimal(AUCs,threshold,TMs,optimal)
     
     return optimal
+
+
+def optimal_thresCV(dframe,category='lung_carcinoma'):
+    dframe, kept=remove_nan_dframe(dframe,category)
+    (rows,columns)=dframe.shape
+    TMs=dframe.columns[5:12]
+    threshold=np.linspace(0,200,400)
+    
+    labels=['No','Yes']
+    lut = dict(zip(labels, [0,1]))
+    y_true=dframe[category].map(lut)
+    y_true=y_true.tolist()
+    
+    skf = StratifiedKFold(n_splits=10)
+    
+    AUC_means=[]
+    AUC_std=[];
+    AUCs=[]
+    for train_index, test_index in skf.split(dframe.iloc[:,5:12], y_true):
+        AUCs=np.zeros((len(threshold),len(TMs)))
+        optimal=dict()
+        for mi,marker in enumerate(range(5,12)):
+            for index,thres in enumerate(threshold):
+                LC_result=np.zeros(len(train_index))
+                for pat in train_index:
+                    if dframe.iloc[pat,marker]>=thres:
+                        LC_result[pat]=1
+                fpr, tpr, _ = roc_curve(y_true[train_index], LC_result)
+                AUCs[index,mi]=auc(fpr, tpr)
+            place=np.argmax(AUCs[:,mi])
+            optimal[TMs[mi]] = threshold[place]
+        
+        predictions=[]
+        LC_index=[]
+        for pat in range(0,len(test_index)):   
+            for i in range(5,12):   
+                TM=dframe.columns[i]
+                if TM in optimal.keys() and pat in test_index:     
+                    if dframe.iloc[pat,i]>=optimal[TM]:   
+                        predictions.append(1)
+                        LC_index.append(pat)
+            if pat not in LC_index:  
+                predictions.append(0)
+        fpr_test, tpr_test, _ = roc_curve(y_true[test_index], predictions)
+        AUCs.append(auc(fpr_test, tpr_test))
+    AUC_means.append(np.mean(AUCs))
+    AUC_std.append(np.std(AUCs))
+    
+    return 
 
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
