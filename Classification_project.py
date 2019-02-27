@@ -102,96 +102,98 @@ def approach_paper(dframe,thresholds,category):
     return PPV,NPV,sensitivity,specificity
 
 def plot_optimal(AUCs,thresholds,TMs,optimal):
-    
-    for i in range(0,len(AUCs.columns)):
-        AUC_list=AUCs[TMs[i]].tolist()
-        opt=optimal[TMs[i]]
+    '''plot the continuous AUC values against the corresponding thresholds for each marker'''
+    for i in range(0,len(AUCs.columns)):  #loop over each marker
+        AUC_list=AUCs[TMs[i]].tolist()   #take the right marker
+        opt=optimal[TMs[i]]    #take the optimal threshold value
         label=TMs[i].split(' ')
         plt.figure()  
-        plt.plot(thresholds, AUC_list, color='darkorange',label='optimal threshold: %0.2f ' % opt + label[1])
+        plt.plot(thresholds, AUC_list, color='darkorange',label='optimal threshold: %0.2f ' % opt + label[1])   #plot the continuous AUCs
         plt.xlabel('Threshold value '+label[1])
         plt.ylabel('AUC')
         plt.title('Threshold values versus AUC for the tumor marker: '+ label[0])
-        plt.plot([opt,opt],[min(AUC_list), max(AUC_list)],linestyle='--',color='black')
+        plt.plot([opt,opt],[min(AUC_list), max(AUC_list)],linestyle='--',color='black')  #plot the optimal threshold value as a dashed line
         plt.legend(loc="lower right")
         plt.show() 
         
     return 
 
 def optimal_thres(dframe,category='lung_carcinoma'):
-    dframe, kept=remove_nan_dframe(dframe,category)
+    '''determine the optimal thresholds for each marker by optimalization of the AUC'''
+    dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
-    TMs=dframe.columns[5:12]
-    threshold=np.linspace(0,200,400)
-    AUCs=np.zeros((len(threshold),len(TMs)))
+    TMs=dframe.columns[5:12]    #names of all tumor markers
+    threshold=np.linspace(0,200,400)   #define possible thresholds
+    AUCs=np.zeros((len(threshold),len(TMs)))   #make room in memory for the AUCs
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
-    y_true=dframe[category].map(lut)
-    optimal=dict()
-    for mi,marker in enumerate(range(5,12)):
-        for index,thres in enumerate(threshold):
-            LC_result=np.zeros(rows)
-            for pat in range(0,rows):
-                if dframe.iloc[pat,marker]>=thres:
+    y_true=dframe[category].map(lut)    #map the true classification to binary values
+    optimal=dict()   #dictionary to store the best threshold values
+    for mi,marker in enumerate(range(5,12)):  #look at each marker separately
+        for index,thres in enumerate(threshold):   #loop over all of the possible threshold values
+            LC_result=np.zeros(rows)  #make room in memory for classification
+            for pat in range(0,rows):   #look at each patient
+                if dframe.iloc[pat,marker]>=thres:   #classification process
                     LC_result[pat]=1
-            fpr, tpr, _ = roc_curve(y_true, LC_result)
-            AUCs[index,mi]=auc(fpr, tpr)
-        place=np.argmax(AUCs[:,mi])
-        optimal[TMs[mi]] = threshold[place]
+            fpr, tpr, _ = roc_curve(y_true, LC_result)   #determine roc of each threshold
+            AUCs[index,mi]=auc(fpr, tpr)   #determine AUC of each threshold
+        place=np.argmax(AUCs[:,mi])   #determine index of best AUC
+        optimal[TMs[mi]] = threshold[place]   #add optimal threshold to dictionary with the corresponding marker
         
-    AUCs=pd.DataFrame(AUCs,columns=TMs)
-    plot_optimal(AUCs,threshold,TMs,optimal)
+    AUCs=pd.DataFrame(AUCs,columns=TMs)  #convert to dataframe
+    plot_optimal(AUCs,threshold,TMs,optimal)   #plot the AUC values and optimal threshold
     
     return optimal
 
 
 def optimal_thresCV(dframe,category='lung_carcinoma'):
-    dframe, kept=remove_nan_dframe(dframe,category)
+    '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
+    dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
-    TMs=dframe.columns[5:12]
-    threshold=np.linspace(0,200,400)
+    TMs=dframe.columns[5:12]   #names of tumor markers
+    threshold=np.linspace(0,200,400)   #define threshold range
     
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)
     y_true=y_true.tolist()
-    y_true=np.array(y_true)
+    y_true=np.array(y_true)  #numpy array of the ground truth
     
-    skf = StratifiedKFold(n_splits=10)
+    skf = StratifiedKFold(n_splits=10)   #initialization of the cross validation
     
-    overall_optimals=dict()
-    for mi,marker in enumerate(range(5,12)):
-        AUCs_CV=[]
-        optimals=[]
-        for train_index, test_index in skf.split(dframe.iloc[:,5:12], y_true):
-            AUCs=np.zeros(len(threshold))
-            for index,thres in enumerate(threshold):
-                LC_result=np.zeros(len(train_index))
-                for z,pat in enumerate(train_index):
-                    if dframe.iloc[pat,marker]>=thres:
-                        LC_result[z]=1
-                fpr, tpr, _ = roc_curve(y_true[train_index], LC_result)
-                AUCs[index]=auc(fpr, tpr)
-            place=np.argmax(AUCs)
-            optimal=threshold[place]
-            optimals.append(optimal)
+    overall_optimals=dict()  #dictionary which will contain the best threshold for each marker
+    for mi,marker in enumerate(range(5,12)):   #look at each marker
+        AUCs_CV=[]   #will contain the AUCs of a marker
+        optimals=[]   #optimal thresholds for each CV set
+        for train_index, test_index in skf.split(dframe.iloc[:,5:12], y_true):  #apply cross validation
+            AUCs=np.zeros(len(threshold))   #will contain the AUCs for all thresholds of the training set
+            for index,thres in enumerate(threshold):  #loop over all possible thresholds
+                LC_result=np.zeros(len(train_index))   #will contain classification for this threshold
+                for z,pat in enumerate(train_index):   #loop over patients in training set
+                    if dframe.iloc[pat,marker]>=thres:   #classify
+                        LC_result[z]=1  
+                fpr, tpr, _ = roc_curve(y_true[train_index], LC_result)   #roc for each threshold
+                AUCs[index]=auc(fpr, tpr)  #add AUC to list for this training set
+            place=np.argmax(AUCs)   #place best AUC for this training set
+            optimal=threshold[place]  #optimal threshold for this CV training set
+            optimals.append(optimal)  #extend the optimal thresholds for each CV set
         
-            predictions=np.zeros(len(test_index))
-            for idx,pat in enumerate(test_index):      
-                if dframe.iloc[pat,marker]>=optimal:   
+            predictions=np.zeros(len(test_index))  #make space in memory for this CV set
+            for idx,pat in enumerate(test_index):   #look at each patient in the test set   
+                if dframe.iloc[pat,marker]>=optimal:   #classify with the optimal threshold determined for the training set
                         predictions[idx]=1
-            fpr_test, tpr_test, _ = roc_curve(y_true[test_index], predictions)
-            AUCs_CV.append(auc(fpr_test, tpr_test))
+            fpr_test, tpr_test, _ = roc_curve(y_true[test_index], predictions)   #roc of this CV test set
+            AUCs_CV.append(auc(fpr_test, tpr_test))  #AUC of this CV test set
         label=TMs[mi].split(' ')
-        g=plt.figure()
+        plt.figure()
         plt.scatter(optimals,AUCs_CV)
         plt.xlabel('Threshold value '+label[1])
         plt.ylabel('AUC')
         plt.title('Threshold values of cross validated test set versus AUC for the individual tumor marker : '+ label[0])
         plt.show()
             
-        spot=np.argmax(AUCs_CV)
-        overall_optimals[TMs[mi]]=optimals[spot]
+        spot=np.argmax(AUCs_CV)  #place of optimal threshold for the marker after cross validation
+        overall_optimals[TMs[mi]]=optimals[spot]    #optimal threshold for the marker after cross validation
     
     return overall_optimals
 
