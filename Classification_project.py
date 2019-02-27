@@ -159,10 +159,12 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     
     skf = StratifiedKFold(n_splits=10)
     
+    overall_optimals=dict()
     for mi,marker in enumerate(range(5,12)):
         AUCs_CV=[]
+        optimals=[]
         for train_index, test_index in skf.split(dframe.iloc[:,5:12], y_true):
-            AUCs=np.zeros(len(threshold),1)
+            AUCs=np.zeros(len(threshold))
             for index,thres in enumerate(threshold):
                 LC_result=np.zeros(len(train_index))
                 for z,pat in enumerate(train_index):
@@ -171,7 +173,8 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
                 fpr, tpr, _ = roc_curve(y_true[train_index], LC_result)
                 AUCs[index]=auc(fpr, tpr)
             place=np.argmax(AUCs)
-            optimal = threshold[place]
+            optimal=threshold[place]
+            optimals.append(optimal)
         
             predictions=np.zeros(len(test_index))
             for idx,pat in enumerate(test_index):      
@@ -179,9 +182,18 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
                         predictions[idx]=1
             fpr_test, tpr_test, _ = roc_curve(y_true[test_index], predictions)
             AUCs_CV.append(auc(fpr_test, tpr_test))
-        
+        label=TMs[mi].split(' ')
+        g=plt.figure()
+        plt.scatter(optimals,AUCs_CV)
+        plt.xlabel('Threshold value '+label[1])
+        plt.ylabel('AUC')
+        plt.title('Threshold values of cross validated test set versus AUC for the individual tumor marker : '+ label[0])
+        plt.show()
+            
+        spot=np.argmax(AUCs_CV)
+        overall_optimals[TMs[mi]]=optimals[spot]
     
-    return 
+    return overall_optimals
 
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
