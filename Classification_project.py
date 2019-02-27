@@ -155,41 +155,31 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)
     y_true=y_true.tolist()
+    y_true=np.array(y_true)
     
     skf = StratifiedKFold(n_splits=10)
     
-    AUC_means=[]
-    AUC_std=[];
-    AUCs=[]
-    for train_index, test_index in skf.split(dframe.iloc[:,5:12], y_true):
-        AUCs=np.zeros((len(threshold),len(TMs)))
-        optimal=dict()
-        for mi,marker in enumerate(range(5,12)):
+    for mi,marker in enumerate(range(5,12)):
+        AUCs_CV=[]
+        for train_index, test_index in skf.split(dframe.iloc[:,5:12], y_true):
+            AUCs=np.zeros(len(threshold),1)
             for index,thres in enumerate(threshold):
                 LC_result=np.zeros(len(train_index))
-                for pat in train_index:
+                for z,pat in enumerate(train_index):
                     if dframe.iloc[pat,marker]>=thres:
-                        LC_result[pat]=1
+                        LC_result[z]=1
                 fpr, tpr, _ = roc_curve(y_true[train_index], LC_result)
-                AUCs[index,mi]=auc(fpr, tpr)
-            place=np.argmax(AUCs[:,mi])
-            optimal[TMs[mi]] = threshold[place]
+                AUCs[index]=auc(fpr, tpr)
+            place=np.argmax(AUCs)
+            optimal = threshold[place]
         
-        predictions=[]
-        LC_index=[]
-        for pat in range(0,len(test_index)):   
-            for i in range(5,12):   
-                TM=dframe.columns[i]
-                if TM in optimal.keys() and pat in test_index:     
-                    if dframe.iloc[pat,i]>=optimal[TM]:   
-                        predictions.append(1)
-                        LC_index.append(pat)
-            if pat not in LC_index:  
-                predictions.append(0)
-        fpr_test, tpr_test, _ = roc_curve(y_true[test_index], predictions)
-        AUCs.append(auc(fpr_test, tpr_test))
-    AUC_means.append(np.mean(AUCs))
-    AUC_std.append(np.std(AUCs))
+            predictions=np.zeros(len(test_index))
+            for idx,pat in enumerate(test_index):      
+                if dframe.iloc[pat,marker]>=optimal:   
+                        predictions[idx]=1
+            fpr_test, tpr_test, _ = roc_curve(y_true[test_index], predictions)
+            AUCs_CV.append(auc(fpr_test, tpr_test))
+        
     
     return 
 
