@@ -101,34 +101,33 @@ def approach_paper(dframe,thresholds,category):
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
     return PPV,NPV,sensitivity,specificity
 
-def plot_optimal(AUCs,thresholds,TMs):
-    optimal=[]
+def plot_optimal(AUCs,thresholds,TMs,optimal):
+    
     for i in range(0,len(AUCs.columns)):
-        AUC_list=AUCs[TMs[i]]
-        plt.figure()  
-        plt.plot(thresholds, AUC_list.tolist(), color='darkorange')
+        AUC_list=AUCs[TMs[i]].tolist()
+        opt=optimal[TMs[i]]
         label=TMs[i].split(' ')
+        plt.figure()  
+        plt.plot(thresholds, AUC_list, color='darkorange',label='optimal threshold: %0.2f ' % opt + label[1])
         plt.xlabel('Threshold value '+label[1])
         plt.ylabel('AUC')
         plt.title('Threshold values versus AUC for the tumor marker: '+ label[0])
-        max_auc=AUC_list.max()
-        optimal_thres=AUC_list.idxmax()
-        plt.plot([optimal_thres,optimal_thres],[AUC_list.min(), max_auc],linestyle='--',color='black',label='optimal threshold: %0.2f ' % optimal_thres + label[1])
+        plt.plot([opt,opt],[min(AUC_list), max(AUC_list)],linestyle='--',color='black')
         plt.legend(loc="lower right")
         plt.show() 
-        optimal.append(optimal_thres)
-    
-    return optimal
+        
+    return 
 
-def optimal_thres(dframe,category):
+def optimal_thres(dframe,category='lung_carcinoma'):
     dframe, kept=remove_nan_dframe(dframe,category)
     (rows,columns)=dframe.shape
     TMs=dframe.columns[5:12]
-    threshold=range(0,201)
+    threshold=np.linspace(0,200,100)
     AUCs=np.zeros((len(threshold),len(TMs)))
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)
+    optimal=dict()
     for mi,marker in enumerate(range(5,12)):
         for index,thres in enumerate(threshold):
             LC_result=np.zeros(rows)
@@ -137,10 +136,13 @@ def optimal_thres(dframe,category):
                     LC_result[pat]=1
             fpr, tpr, _ = roc_curve(y_true, LC_result)
             AUCs[index,mi]=auc(fpr, tpr)
+        place=np.argmax(AUCs[:,mi])
+        optimal[TMs[mi]] = threshold[place]
+        
     AUCs=pd.DataFrame(AUCs,columns=TMs)
-    optimal=plot_optimal(AUCs,threshold,TMs)
+    plot_optimal(AUCs,threshold,TMs,optimal)
     
-    return AUCs
+    return optimal
 
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
