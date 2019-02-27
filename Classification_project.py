@@ -16,9 +16,7 @@ import numpy as np
 from decimal import getcontext, Decimal  
 from sklearn.tree import export_graphviz
 import graphviz
-from collections import Counter
 from imblearn.over_sampling import SMOTE
-import pydot
 
 
 def read_data(file_loc):
@@ -104,9 +102,10 @@ def approach_paper(dframe,thresholds,category):
     return PPV,NPV,sensitivity,specificity
 
 def plot_optimal(AUCs,thresholds,TMs):
+    optimal=[]
     for i in range(0,len(AUCs.columns)):
         AUC_list=AUCs[TMs[i]]
-        g=plt.figure()  
+        plt.figure()  
         plt.plot(thresholds, AUC_list.tolist(), color='darkorange')
         label=TMs[i].split(' ')
         plt.xlabel('Threshold value '+label[1])
@@ -114,17 +113,18 @@ def plot_optimal(AUCs,thresholds,TMs):
         plt.title('Threshold values versus AUC for the tumor marker: '+ label[0])
         max_auc=AUC_list.max()
         optimal_thres=AUC_list.idxmax()
-        plt.plot([optimal_thres,optimal_thres],[AUC_list.min(), max_auc],linestyle='--',color='black',label='optimal threshold: %0.2f ' % optimal_thres)
+        plt.plot([optimal_thres,optimal_thres],[AUC_list.min(), max_auc],linestyle='--',color='black',label='optimal threshold: %0.2f ' % optimal_thres + label[1])
         plt.legend(loc="lower right")
         plt.show() 
+        optimal.append(optimal_thres)
     
-    return
+    return optimal
 
 def optimal_thres(dframe,category):
     dframe, kept=remove_nan_dframe(dframe,category)
     (rows,columns)=dframe.shape
     TMs=dframe.columns[5:12]
-    threshold=range(0,101)
+    threshold=range(0,201)
     AUCs=np.zeros((len(threshold),len(TMs)))
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
@@ -138,7 +138,7 @@ def optimal_thres(dframe,category):
             fpr, tpr, _ = roc_curve(y_true, LC_result)
             AUCs[index,mi]=auc(fpr, tpr)
     AUCs=pd.DataFrame(AUCs,columns=TMs)
-    plot_optimal(AUCs,threshold,TMs)
+    optimal=plot_optimal(AUCs,threshold,TMs)
     
     return AUCs
 
