@@ -18,6 +18,7 @@ from sklearn.tree import export_graphviz
 import graphviz
 from collections import Counter
 from imblearn.over_sampling import SMOTE
+import pydot
 
 
 def read_data(file_loc):
@@ -102,6 +103,45 @@ def approach_paper(dframe,thresholds,category):
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
     return PPV,NPV,sensitivity,specificity
 
+def plot_optimal(AUCs,thresholds,TMs):
+    for i in range(0,len(AUCs.columns)):
+        AUC_list=AUCs[TMs[i]]
+        g=plt.figure()  
+        plt.plot(thresholds, AUC_list.tolist(), color='darkorange')
+        label=TMs[i].split(' ')
+        plt.xlabel('Threshold value '+label[1])
+        plt.ylabel('AUC')
+        plt.title('Threshold values versus AUC for the tumor marker: '+ label[0])
+        max_auc=AUC_list.max()
+        optimal_thres=AUC_list.idxmax()
+        plt.plot([optimal_thres,optimal_thres],[AUC_list.min(), max_auc],linestyle='--',color='black',label='optimal threshold: %0.2f ' % optimal_thres)
+        plt.legend(loc="lower right")
+        plt.show() 
+    
+    return
+
+def optimal_thres(dframe,category):
+    dframe, kept=remove_nan_dframe(dframe,category)
+    (rows,columns)=dframe.shape
+    TMs=dframe.columns[5:12]
+    threshold=range(0,101)
+    AUCs=np.zeros((len(threshold),len(TMs)))
+    labels=['No','Yes']
+    lut = dict(zip(labels, [0,1]))
+    y_true=dframe[category].map(lut)
+    for mi,marker in enumerate(range(5,12)):
+        for index,thres in enumerate(threshold):
+            LC_result=np.zeros(rows)
+            for pat in range(0,rows):
+                if dframe.iloc[pat,marker]>=thres:
+                    LC_result[pat]=1
+            fpr, tpr, _ = roc_curve(y_true, LC_result)
+            AUCs[index,mi]=auc(fpr, tpr)
+    AUCs=pd.DataFrame(AUCs,columns=TMs)
+    plot_optimal(AUCs,threshold,TMs)
+    
+    return AUCs
+
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
     export_graphviz(dtree, out_file='tree.dot', feature_names = feature_names,class_names = class_names,rounded = True, proportion = False, precision = 2, filled = True)
@@ -119,17 +159,22 @@ def prepare_data(dframe,cat,normalize,smote):
     lut = dict(zip(labels, length)) #create dictionary of possible options
     markers=dframe.iloc[:,5:12] #TM
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
+        
+    if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
+        markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
+        
+    X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2)   #split the data in a training set and a test set
     
     if smote==True:     #apply synthetic Minority Over-sampling if specified (usually for skewed data distribution)
         sm = SMOTE(random_state=42)   #initialization
         name=markers.columns   #names of the TM's
-        markers,y_true=sm.fit_resample(markers.values,y_true)  #apply operationa and provide new data
-        markers=pd.DataFrame(markers,columns=name)   #convert the TM list to a Dataframe
-    
-    if normalize==True:   #scale each of the columns of the tumor markers
+        X_train,y_train=sm.fit_resample(X_train,y_train)  #apply operation and provide new data
+        X_train=pd.DataFrame(X_train,columns=name)   #convert the TM list to a Dataframe
+        
+    if normalize==True and smote==True:   #scale each of the columns of the tumor markers
         markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
-    
-    X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2, random_state=1)   #split the data in a training set and a test set
+        X_train=pd.DataFrame(preprocessing.scale(X_train.values,axis=0),columns=X_train.columns)
+        X_test=pd.DataFrame(preprocessing.scale(X_test,axis=0),columns=markers.columns)
     
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
@@ -145,7 +190,7 @@ def det_CVscore(clf,markers,y_true):
 def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train it after which predictions are made for the test set and statistics for this classification are calculated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
-    clf = tree.DecisionTreeClassifier(random_state=1) #initialization of the classifier
+    clf = tree.DecisionTreeClassifier() #initialization of the classifier
     clf.fit(X_train,y_train)  #fit classifier to training data
     #visualize_DT(clf,dframe.columns[5:12],labels)
 
@@ -161,7 +206,7 @@ def Logistic_clas(dframe,cat,save_roc):
     '''Set up a Logistic Regression classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     
-    clf = LogisticRegression(penalty='l2',solver='liblinear',random_state=1)    #initialization of the classifier
+    clf = LogisticRegression(penalty='l2',solver='liblinear')    #initialization of the classifier
     clf.fit(X_train,y_train)  #fitting training set
     
     CV_score=det_CVscore(clf,markers.values,y_true)  #cross validation
