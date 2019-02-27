@@ -26,17 +26,31 @@ def read_data(file_loc):
 
 def remove_nan_dframe(dframe,class_sort):
     '''remove patients from the dataframe which contain a Nan value in the specified column and return the new dataframe and the original indexes which were kept '''
-    drop_index=[]; #will contain all indexes wchich will have to be removed
+    drop_index=[]; #will contain all indexes which will have to be removed
     kept=[];  #will contain all kept indexes 
     (r,c)=dframe.shape
     column=dframe[class_sort]   #select column which will have to be evaluated
     for i in range(0,r):  #look at each seperate patient
+        for marker in range(6,13):
+            if np.isnan(dframe.iloc[i,marker])==True and i not in drop_index:
+                drop_index.append(i)
         if isinstance(column[i], float) or column[i]=='Niet bekend':    #a Nan is classified as a float in python
             drop_index.append(i)   #if it is a Nan the index will have to be removed
         else:
             kept.append(i)    #if not a Nan the index will be kept
     dframe=dframe.drop(drop_index,axis=0)   #drop all Nan indexes
     return dframe, kept
+
+def remove_nan_markers(dframe):
+    drop_index=[]; #will contain all indexes wchich will have to be removed
+    (r,c)=dframe.shape
+    for marker in range(6,13):
+        for pat in range(0,r):
+            if np.isnan(dframe.iloc[pat,marker])==True and pat not in drop_index:
+                drop_index.append(pat)
+    dframe=dframe.drop(drop_index,axis=0)
+    return dframe
+    
 
 def remove_nan_list(lis):
     '''remove Nan values from the list and also specify which original indexes where kept '''
@@ -60,7 +74,7 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     labels=cla.unique()    #determine the unique strings in the column
     lut = dict(zip(labels, 'rbgk')) #create dictionary of possible options and assign a color code to each
     row_colors = cla.map(lut)   #provides the corresponding color code for each of the patients and thus indicates the label
-    markers=dframe.iloc[:,5:12]  #Tumor markers
+    markers=dframe.iloc[:,6:13]  #Tumor markers
     cmap = sns.diverging_palette(250, 10, n=9, as_cmap=True)   #select a color pallete for the clustermap
     g=sns.clustermap(markers, cmap=cmap, metric='euclidean', method='single', col_cluster=False, row_colors=row_colors, z_score=1)   #make clustermap with normalization of the columns
 
@@ -82,7 +96,7 @@ def approach_paper(dframe,thresholds,category):
     LC_index=[];   #will contain the indexes of patients which are classified as havin LC
     LC_results=[];   #results of the thresholding operation
     for pat in range(0,rows):   #look at each patient 
-        for i in range(5,12):   #look at all tumor markers
+        for i in range(6,13):   #look at all tumor markers
             TM=dframe.columns[i]
             if TM in thresholds.keys() and pat not in LC_index:     #see if a threshold is present for the tumor marker and if the patient is not already classified as having LC
                 if dframe.iloc[pat,i]>=thresholds[TM]:   #if the TM concentration exceeds the threshold at patient to list and classify as having LC
@@ -122,7 +136,7 @@ def optimal_thres(dframe,category='lung_carcinoma'):
     '''determine the optimal thresholds for each marker by optimalization of the AUC'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
-    TMs=dframe.columns[5:12]    #names of all tumor markers
+    TMs=dframe.columns[6:13]    #names of all tumor markers
     threshold=np.linspace(0,200,400)   #define possible thresholds
     AUCs=np.zeros((len(threshold),len(TMs)))   #make room in memory for the AUCs
     labels=['No','Yes']
@@ -150,7 +164,7 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
-    TMs=dframe.columns[5:12]   #names of tumor markers
+    TMs=dframe.columns[6:13]   #names of tumor markers
     threshold=np.linspace(0,200,400)   #define threshold range
     
     labels=['No','Yes']
@@ -162,10 +176,10 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     skf = StratifiedKFold(n_splits=10)   #initialization of the cross validation
     
     overall_optimals=dict()  #dictionary which will contain the best threshold for each marker
-    for mi,marker in enumerate(range(5,12)):   #look at each marker
+    for mi,marker in enumerate(range(6,13)):   #look at each marker
         AUCs_CV=[]   #will contain the AUCs of a marker
         optimals=[]   #optimal thresholds for each CV set
-        for train_index, test_index in skf.split(dframe.iloc[:,5:12], y_true):  #apply cross validation
+        for train_index, test_index in skf.split(dframe.iloc[:,6:13], y_true):  #apply cross validation
             AUCs=np.zeros(len(threshold))   #will contain the AUCs for all thresholds of the training set
             for index,thres in enumerate(threshold):  #loop over all possible thresholds
                 LC_result=np.zeros(len(train_index))   #will contain classification for this threshold
@@ -212,7 +226,7 @@ def prepare_data(dframe,cat,normalize,smote):
     labels=y_true.unique()  #determine unique labels
     length=range(0,len(labels))  #provide a integer to each label
     lut = dict(zip(labels, length)) #create dictionary of possible options
-    markers=dframe.iloc[:,5:12] #TM
+    markers=dframe.iloc[:,6:13] #TM
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
         
     if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
@@ -350,7 +364,7 @@ def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
     return
     
 category_to_investigate='lung_carcinoma'
-file_loc='tumormarkers_lungcancer.csv'
+file_loc='data_new.csv'
 dframe=read_data(file_loc)    #read data
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
 
