@@ -28,14 +28,9 @@ def remove_nan_dframe(dframe,class_sort):
     '''remove patients from the dataframe which contain a Nan value in the specified column and return the new dataframe and the original indexes which were kept '''
     drop_index=[]; #will contain all indexes which will have to be removed
     kept=[];  #will contain all kept indexes 
-    (r,c)=dframe.shape
     name=dframe.columns
-    column=dframe[class_sort]   #select column which will have to be evaluated
-    for i in range(0,r):  #look at each seperate patient
-        for marker in range(6,13):
-            if np.isnan(dframe.iloc[i,marker])==True and i not in drop_index:
-                drop_index.append(i)
-        if isinstance(column[i], float) or column[i]=='Niet bekend':    #a Nan is classified as a float in python
+    for i in dframe.index:  #look at each seperate patient
+        if isinstance(dframe.loc[i,class_sort], float) or dframe.loc[i,class_sort]=='Niet bekend':    #a Nan is classified as a float in python
             drop_index.append(i)   #if it is a Nan the index will have to be removed
         else:
             kept.append(i)    #if not a Nan the index will be kept
@@ -45,13 +40,28 @@ def remove_nan_dframe(dframe,class_sort):
 
 def remove_nan_markers(dframe):
     drop_index=[]; #will contain all indexes wchich will have to be removed
-    (r,c)=dframe.shape
-    for marker in range(6,13):
-        for pat in range(0,r):
-            if np.isnan(dframe.iloc[pat,marker])==True and pat not in drop_index:
+    name=dframe.columns
+    TMs=name[6:13]
+    for marker in TMs:
+        for pat in dframe.index:
+            if np.isnan(dframe.loc[pat,marker])==True and pat not in drop_index:
                 drop_index.append(pat)
     dframe=dframe.drop(drop_index,axis=0)
+    dframe=pd.DataFrame(dframe,columns=name)
     return dframe
+
+def remove_nan_int(dframe,cat='age'):
+    drop_index=[]; #will contain all indexes which will have to be removed
+    kept=[];  #will contain all kept indexes 
+    name=dframe.columns
+    for i in dframe.index:  #look at each seperate patient
+        if np.isnan(dframe.loc[i,cat])==True and i not in drop_index:    
+            drop_index.append(i)   #if it is a Nan the index will have to be removed
+        else:
+            kept.append(i)    #if not a Nan the index will be kept
+    dframe=dframe.drop(drop_index,axis=0)   #drop all Nan indexes
+    dframe=pd.DataFrame(dframe,columns=name)
+    return dframe, kept
     
 
 def remove_nan_list(lis):
@@ -234,6 +244,8 @@ def prepare_data(dframe,cat,normalize,smote):
     if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
         markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
         
+    
+        
     X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2)   #split the data in a training set and a test set
     
     if smote==True:     #apply synthetic Minority Over-sampling if specified (usually for skewed data distribution)
@@ -368,10 +380,12 @@ def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
 category_to_investigate='lung_carcinoma'
 file_loc='data_new.csv'
 dframe=read_data(file_loc)    #read data
+dframe=remove_nan_markers(dframe)
+
 make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 if category_to_investigate=='lung_carcinoma':
-    PPV,NPV,sensi,speci=approach_paper(dframe,thresholds,category_to_investigate)        
-aucDT,PPV,NPV,sensitivity,specificity, report, CV_score=decisionT(dframe,category_to_investigate,save_roc=False)
-aucLC,PPV2,NPV2,sensitivity2,specificity2, report2, CV_score2=Logistic_clas(dframe,category_to_investigate,save_roc=False)
+    PPV_p,NPV_p,sensi_p,speci_p=approach_paper(dframe,thresholds,category_to_investigate)        
+aucDT,PPV_DT,NPV_DT,sensitivity_DT,specificity_DT, report_DT, CV_score_DT=decisionT(dframe,category_to_investigate,save_roc=False)
+aucLC,PPV_LC,NPV_LC,sensitivity_LC,specificity_LC, report_LC, CV_score_LC=Logistic_clas(dframe,category_to_investigate,save_roc=False)
