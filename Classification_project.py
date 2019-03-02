@@ -28,39 +28,35 @@ def remove_nan_dframe(dframe,class_sort):
     '''remove patients from the dataframe which contain a Nan value in the specified column and return the new dataframe and the original indexes which were kept '''
     drop_index=[]; #will contain all indexes which will have to be removed
     kept=[];  #will contain all kept indexes 
-    name=dframe.columns
     for i in dframe.index:  #look at each seperate patient
         if isinstance(dframe.loc[i,class_sort], float) or dframe.loc[i,class_sort]=='Niet bekend':    #a Nan is classified as a float in python
             drop_index.append(i)   #if it is a Nan the index will have to be removed
         else:
             kept.append(i)    #if not a Nan the index will be kept
     dframe=dframe.drop(drop_index,axis=0)   #drop all Nan indexes
-    dframe=pd.DataFrame(dframe,columns=name)
     return dframe, kept
 
 def remove_nan_markers(dframe):
-    drop_index=[]; #will contain all indexes wchich will have to be removed
-    name=dframe.columns
-    TMs=name[6:13]
-    for marker in TMs:
-        for pat in dframe.index:
-            if np.isnan(dframe.loc[pat,marker])==True and pat not in drop_index:
+    '''remove the patients with unknown concentrations of the tumor markers'''
+    drop_index=[]; #will contain all indexes wchich will have to be removed  
+    TMs=dframe.columns[6:13]  #names of columns with the tumor markers
+    for marker in TMs:   #look at each column which contains a TM
+        for pat in dframe.index:  #look at each patientin the dataframe
+            if np.isnan(dframe.loc[pat,marker])==True and pat not in drop_index:   #if the patient has a Nan as concentraton add to list
                 drop_index.append(pat)
-    dframe=dframe.drop(drop_index,axis=0)
-    dframe=pd.DataFrame(dframe,columns=name)
+    dframe=dframe.drop(drop_index,axis=0)  #drop all patient with unknown TM(s)
     return dframe
 
 def remove_nan_int(dframe,cat='age'):
+    '''remove patients from the dataframe which contain a Nan value in the specified column with integers/floats and return the new dataframe'''
     drop_index=[]; #will contain all indexes which will have to be removed
     kept=[];  #will contain all kept indexes 
-    name=dframe.columns
     for i in dframe.index:  #look at each seperate patient
-        if np.isnan(dframe.loc[i,cat])==True and i not in drop_index:    
+        if np.isnan(dframe.loc[i,cat])==True and i not in drop_index:  #if the value is a Nan then add to list  
             drop_index.append(i)   #if it is a Nan the index will have to be removed
         else:
             kept.append(i)    #if not a Nan the index will be kept
     dframe=dframe.drop(drop_index,axis=0)   #drop all Nan indexes
-    dframe=pd.DataFrame(dframe,columns=name)
     return dframe, kept
     
 
@@ -191,7 +187,7 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     for mi,marker in enumerate(range(6,13)):   #look at each marker
         AUCs_CV=[]   #will contain the AUCs of a marker
         optimals=[]   #optimal thresholds for each CV set
-        for train_index, test_index in skf.split(dframe.iloc[:,6:13], y_true):  #apply cross validation
+        for train_index, test_index in skf.split(dframe, y_true):  #apply cross validation
             AUCs=np.zeros(len(threshold))   #will contain the AUCs for all thresholds of the training set
             for index,thres in enumerate(threshold):  #loop over all possible thresholds
                 LC_result=np.zeros(len(train_index))   #will contain classification for this threshold
@@ -234,17 +230,30 @@ def visualize_DT(dtree,feature_names,class_names):
 def prepare_data(dframe,cat,normalize,smote):
     '''prepare the data for the classifier by applying mapping and splitting the data and if specified oversampling and/or normalization'''
     dframe, kept=remove_nan_dframe(dframe,cat)  #remove all Nan since these do not contribute to the classifier
+    extra=True
+    if extra==True:
+        dframe,_=remove_nan_int(dframe,'age')
+        dframe,_=remove_nan_dframe(dframe,'smoking_history')
     y_true=dframe[cat]
     labels=y_true.unique()  #determine unique labels
     length=range(0,len(labels))  #provide a integer to each label
     lut = dict(zip(labels, length)) #create dictionary of possible options
     markers=dframe.iloc[:,6:13] #TM
+    TMs=dframe.columns[6:13]
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
         
     if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
         markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
         
+    if extra==True:
+        ages=dframe['age']
+        ages=np.rint(ages)
+        smoking=dframe['smoking_history']
+        transf={'Nooit':0,'Verleden':1,'Actief':2}
+        smoking=smoking.map(transf)
     
+        markers['age'] = ages
+        markers['smoking_history'] = smoking
         
     X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2)   #split the data in a training set and a test set
     
@@ -255,9 +264,10 @@ def prepare_data(dframe,cat,normalize,smote):
         X_train=pd.DataFrame(X_train,columns=name)   #convert the TM list to a Dataframe
         
     if normalize==True and smote==True:   #scale each of the columns of the tumor markers
-        markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
-        X_train=pd.DataFrame(preprocessing.scale(X_train.values,axis=0),columns=X_train.columns)
-        X_test=pd.DataFrame(preprocessing.scale(X_test,axis=0),columns=markers.columns)
+        X_test = pd.DataFrame(X_test, columns=markers.columns)
+        markers[TMs] = preprocessing.scale(markers.values[:,0:7],axis=0)
+        X_train[TMs] = preprocessing.scale(X_train.values[:,0:7],axis=0)
+        X_test[TMs] = preprocessing.scale(X_test.values[:,0:7],axis=0)
     
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
@@ -275,7 +285,7 @@ def decisionT(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
     clf.fit(X_train,y_train)  #fit classifier to training data
-    #visualize_DT(clf,dframe.columns[5:12],labels)
+    #visualize_DT(clf,dframe.columns[6:13],labels)
 
     CV_score=det_CVscore(clf,markers.values,y_true)  #apply cross validation and get score
     
