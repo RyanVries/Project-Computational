@@ -59,7 +59,6 @@ def remove_nan_int(dframe,cat='age'):
     dframe=dframe.drop(drop_index,axis=0)   #drop all Nan indexes
     return dframe, kept
     
-
 def remove_nan_list(lis):
     '''remove Nan values from the list and also specify which original indexes where kept '''
     drop_index=[];  #will contain all indexes wchich will have to be removed
@@ -166,7 +165,6 @@ def optimal_thres(dframe,category='lung_carcinoma'):
     plot_optimal(AUCs,threshold,TMs,optimal)   #plot the AUC values and optimal threshold
     
     return optimal
-
 
 def optimal_thresCV(dframe,category='lung_carcinoma'):
     '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
@@ -279,7 +277,6 @@ def det_CVscore(clf,markers,y_true):
     CV_score={'mean':mn,'std':std}
     return CV_score
     
-
 def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train it after which predictions are made for the test set and statistics for this classification are calculated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
@@ -367,7 +364,6 @@ def roc_auc(y_true,predictions,category,save_roc,dic,classifier):
         auc_keras = auc(fpr_keras, tpr_keras)
         print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,False,classifier) #print ROC curves
         return auc_keras 
-    
     
 def print_stats(PPV,NPV,sensi,speci,classifier,category):
     'Make a tabel of the relevant statistical values and print this'''
