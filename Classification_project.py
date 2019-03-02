@@ -230,8 +230,8 @@ def visualize_DT(dtree,feature_names,class_names):
 def prepare_data(dframe,cat,normalize,smote):
     '''prepare the data for the classifier by applying mapping and splitting the data and if specified oversampling and/or normalization'''
     dframe, kept=remove_nan_dframe(dframe,cat)  #remove all Nan since these do not contribute to the classifier
-    extra=True
-    if extra==True:
+    extra=True  #provide additional data to the classifiers of age and smoking history
+    if extra==True: #remove the Nan's for the ages and smoking history if data will have to be included
         dframe,_=remove_nan_int(dframe,'age')
         dframe,_=remove_nan_dframe(dframe,'smoking_history')
     y_true=dframe[cat]
@@ -247,13 +247,13 @@ def prepare_data(dframe,cat,normalize,smote):
         
     if extra==True:
         ages=dframe['age']
-        ages=np.rint(ages)
-        smoking=dframe['smoking_history']
-        transf={'Nooit':0,'Verleden':1,'Actief':2}
-        smoking=smoking.map(transf)
-    
-        markers['age'] = ages
-        markers['smoking_history'] = smoking
+        ages=np.rint(ages)  #round the ages to the nearest integer
+        markers['age'] = ages #add the ages to the dataframe with the tumor markers
+        
+        smoking=dframe['smoking_history'] 
+        transf={'Nooit':0,'Verleden':1,'Actief':2}   #dictonary to transform the strings to integers
+        smoking=smoking.map(transf)   #map the strings in the list with the provided dictionary
+        markers['smoking_history'] = smoking  #add the smoking history to the dataframe with the tumor markers
         
     X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2)   #split the data in a training set and a test set
     
