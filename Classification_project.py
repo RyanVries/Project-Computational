@@ -101,24 +101,27 @@ def approach_paper(dframe,thresholds,category):
     """use the specified thresholds from the paper to classify each patient (LC=1 and no LC=0)"""
     dframe, kept=remove_nan_dframe(dframe,category)
     (rows,columns)=dframe.shape
-    LC_index=[];   #will contain the indexes of patients which are classified as havin LC
-    LC_results=[];   #results of the thresholding operation
-    for pat in range(0,rows):   #look at each patient 
-        for i in range(6,13):   #look at all tumor markers
-            TM=dframe.columns[i]
-            if TM in thresholds.keys() and pat not in LC_index:     #see if a threshold is present for the tumor marker and if the patient is not already classified as having LC
-                if dframe.iloc[pat,i]>=thresholds[TM]:   #if the TM concentration exceeds the threshold at patient to list and classify as having LC
-                    LC_index.append(pat)
-                    LC_results.append(1)
-        if pat not in LC_index:  #if patient does not exceed any of the thresholds classify as not having LC
-            LC_results.append(0)
-    predictions=LC_results
-    
     truth=dframe[category]  
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
+    
     ground = truth.map(lut)   #the ground truth of each patient mapped with the labels dictionary to have a binary problem
     gr=ground.tolist()
+    
+    LC_results=np.zeros(rows)   #results of the thresholding operation
+    for i in range(6,13):   #look at all tumor markers
+        TM=dframe.columns[i]
+        LC_marker=np.zeros(rows)
+        if TM in thresholds.keys():     #see if a threshold is present for the tumor marker
+            for pat in range(0,rows):   #look at each patient 
+                if dframe.iloc[pat,i]>=thresholds[TM]:   #if the TM concentration exceeds the threshold at patient to list and classify as having LC
+                    LC_results[pat]=1
+                    LC_marker[pat]=1
+            PPV,NPV,sensitivity,specificity,_=evaluate_stats(gr,LC_marker,labels)  #evaluate the operation by calculaton the programmed statistical values
+            print_stats(PPV[1],NPV[1],sensitivity[1],specificity[1],'Individual threshold '+TM,category_to_investigate)   #provide the statistics in a table
+    predictions=LC_results
+    
+    
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)  #evaluate the operation by calculaton the programmed statistical values
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
     return PPV,NPV,sensitivity,specificity,report
@@ -220,7 +223,7 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
 
 def find_nearest(array, value, pos):
     array = np.asarray(array)
-    diff = np.abs(array - value)
+    diff = array - value
     top=diff[pos:]
     bot=diff[:pos]
     top_idx=top.argmin()+pos
@@ -236,7 +239,7 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
-    k=10
+    k=5
     selection=dframe.index.tolist()
     optimal=dict()
     
