@@ -218,6 +218,15 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     
     return overall_optimals
 
+def find_nearest(array, value, pos):
+    array = np.asarray(array)
+    diff = np.abs(array - value)
+    top=diff[pos:]
+    bot=diff[:pos]
+    top_idx=top.argmin()+pos
+    bot_idx=bot.argmin()
+    return bot_idx,top_idx
+
 def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
     '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
@@ -229,6 +238,7 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
     y_true=dframe[category].map(lut)    #map the true classification to binary values
     k=10
     selection=dframe.index.tolist()
+    optimal=dict()
     
     for mi,marker in enumerate(range(6,13)):  #look at each marker separately
         AUCs=np.zeros((len(threshold),k))   #make room in memory for the AUCs
@@ -244,14 +254,22 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
                     y_res[ind]=y_true.loc[f_idx]
                 fpr, tpr, _ = roc_curve(y_res, LC_result)   #determine roc of each threshold
                 AUCs[index,i]=auc(fpr, tpr)   #determine AUC of each threshold
-        plt.errorbar(threshold,np.mean(AUCs,axis=1),yerr=np.std(AUCs,axis=1),linestyle='-',ecolor='black')
+        means=np.mean(AUCs,axis=1)
+        stand=np.std(AUCs,axis=1)
+        plt.errorbar(threshold,means,yerr=stand,linestyle='-',ecolor='black')
         label=TMs[mi].split(' ')
         plt.xlabel('Threshold value '+label[1])
         plt.ylabel('AUC')
         plt.title('Threshold values versus AUC with Bootstrap method for the tumor marker: '+ label[0])
         plt.show()
         
-    return 
+        spot=np.argmax(means)
+        t_range=means[spot]-np.abs(stand[spot])
+        bot,top=find_nearest(means,t_range,spot)
+        string='-'.join([str(threshold[bot]),str(threshold[top])])
+        optimal[TMs[mi]]=string
+        
+    return optimal
 
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
