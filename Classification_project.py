@@ -17,6 +17,7 @@ from decimal import getcontext, Decimal
 from sklearn.tree import export_graphviz
 import graphviz
 from imblearn.over_sampling import SMOTE
+from random import randint
 
 
 def read_data(file_loc):
@@ -120,7 +121,7 @@ def approach_paper(dframe,thresholds,category):
     gr=ground.tolist()
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)  #evaluate the operation by calculaton the programmed statistical values
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
-    return PPV,NPV,sensitivity,specificity
+    return PPV,NPV,sensitivity,specificity,report
 
 def plot_optimal(AUCs,thresholds,TMs,optimal):
     '''plot the continuous AUC values against the corresponding thresholds for each marker'''
@@ -217,6 +218,41 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     
     return overall_optimals
 
+def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
+    '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
+    dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
+    (rows,columns)=dframe.shape
+    TMs=dframe.columns[6:13]    #names of all tumor markers
+    threshold=np.linspace(0,200,400)   #define possible thresholds
+    labels=['No','Yes']
+    lut = dict(zip(labels, [0,1]))
+    y_true=dframe[category].map(lut)    #map the true classification to binary values
+    k=10
+    selection=dframe.index.tolist()
+    
+    for mi,marker in enumerate(range(6,13)):  #look at each marker separately
+        AUCs=np.zeros((len(threshold),k))   #make room in memory for the AUCs
+        for i in range(0,k):
+            ti = [randint(0, len(dframe[TMs[mi]])-1) for p in range(0, len(dframe[TMs[mi]]))]
+            train_index=[selection[z] for z in ti]
+            for index,thres in enumerate(threshold):   #loop over all of the possible threshold values
+                LC_result=np.zeros(len(train_index))  #make room in memory for classification
+                y_res=np.zeros(len(train_index))
+                for ind,f_idx in enumerate(train_index): 
+                    if (dframe.loc[f_idx,TMs[mi]])>=thres:   #classification process
+                        LC_result[ind]=1
+                    y_res[ind]=y_true.loc[f_idx]
+                fpr, tpr, _ = roc_curve(y_res, LC_result)   #determine roc of each threshold
+                AUCs[index,i]=auc(fpr, tpr)   #determine AUC of each threshold
+        plt.errorbar(threshold,np.mean(AUCs,axis=1),yerr=np.std(AUCs,axis=1),linestyle='-',ecolor='black')
+        label=TMs[mi].split(' ')
+        plt.xlabel('Threshold value '+label[1])
+        plt.ylabel('AUC')
+        plt.title('Threshold values versus AUC with Bootstrap method for the tumor marker: '+ label[0])
+        plt.show()
+        
+    return 
+
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
     export_graphviz(dtree, out_file='tree.dot', feature_names = feature_names,class_names = class_names,rounded = True, proportion = False, precision = 2, filled = True)
@@ -271,10 +307,10 @@ def prepare_data(dframe,cat,normalize,smote):
 
 def det_CVscore(clf,markers,y_true):
     '''apply cross validation score and determine the mean and standard deviation of the score'''
-    score=cross_val_score(clf,markers,y_true,cv=5,scoring='roc_auc')  #cross validation step
-    std=np.std(score)
-    mn=np.mean(score)
-    CV_score={'mean':mn,'std':std}
+    score=cross_val_score(clf,markers,y_true,cv=10,scoring='roc_auc')  #cross validation step
+    score_f1=cross_val_score(clf,markers,y_true,cv=10,scoring='f1')
+    CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
+    
     return CV_score
     
 def decisionT(dframe,cat,save_roc):
@@ -392,6 +428,6 @@ make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 if category_to_investigate=='lung_carcinoma':
-    PPV_p,NPV_p,sensi_p,speci_p=approach_paper(dframe,thresholds,category_to_investigate)        
+    PPV_p,NPV_p,sensi_p,speci_p,report_p=approach_paper(dframe,thresholds,category_to_investigate)        
 aucDT,PPV_DT,NPV_DT,sensitivity_DT,specificity_DT, report_DT, CV_score_DT=decisionT(dframe,category_to_investigate,save_roc=False)
 aucLC,PPV_LC,NPV_LC,sensitivity_LC,specificity_LC, report_LC, CV_score_LC=Logistic_clas(dframe,category_to_investigate,save_roc=False)
