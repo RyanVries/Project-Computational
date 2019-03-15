@@ -18,6 +18,8 @@ from sklearn.tree import export_graphviz
 import graphviz
 from imblearn.over_sampling import SMOTE
 from random import randint
+import warnings
+warnings.filterwarnings("ignore")
 
 
 def read_data(file_loc):
@@ -243,7 +245,7 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
     TMs=dframe.columns[6:13]    #names of all tumor markers
-    threshold=np.linspace(0,125,400)   #define possible thresholds
+    threshold=np.linspace(0,150,400)   #define possible thresholds
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
@@ -299,8 +301,6 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
         
     return optimal_range,optimal_means
     
-    
-
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
     export_graphviz(dtree, out_file='tree.dot', feature_names = feature_names,class_names = class_names,rounded = True, proportion = False, precision = 2, filled = True)
