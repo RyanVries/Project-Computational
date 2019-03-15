@@ -238,7 +238,7 @@ def find_nearest(array, value, pos):
     bot_idx=bot.argmin()
     return bot_idx,top_idx
 
-def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
+def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
     '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
@@ -251,7 +251,6 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
     selection=dframe.index.tolist()
     optimal_range=dict()
     optimal_means=dict()
-    used_metric='AUC'
     
     for mi,marker in enumerate(range(6,13)):  #look at each marker separately
         metric=np.zeros((len(threshold),k))   #make room in memory for the AUCs
@@ -279,20 +278,20 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
         plt.title('Threshold values versus '+used_metric+ ' with Bootstrap method for the tumor marker: '+ label[0])
         plt.show()
         
-    if used_metric=='AUC':
-        spot=np.argmax(means)
-        t_range=means[spot]-np.abs(stand[spot])
-        bot,top=find_nearest(means,t_range,spot)
-        string='-'.join([str(threshold[bot]),str(threshold[top])])
-        optimal_range[TMs[mi]]=string
-        optimal_means[TMs[mi]]=means[spot]
-        return optimal_range,optimal_means
+        if used_metric=='AUC':
+            spot=np.argmax(means)
+            t_range=means[spot]-np.abs(stand[spot])
+            bot,top=find_nearest(means,t_range,spot)
+            string='-'.join([str(threshold[bot]),str(threshold[top])])
+            optimal_range[TMs[mi]]=string
+            optimal_means[TMs[mi]]=means[spot]
         
-    elif used_metric=='F1':
-        spot=np.argmax(means)
-        optimal_means[TMs[mi]]=means[spot]
-        return 0,optimal_means
-    return
+        elif used_metric=='F1':
+            spot=np.argmax(means)
+            optimal_means[TMs[mi]]=means[spot]
+        
+    return optimal_range,optimal_means
+    
     
 
 def visualize_DT(dtree,feature_names,class_names):
