@@ -99,7 +99,7 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
         g.savefig('clustermap'+extra+'.png')
     return
 
-def approach_paper(dframe,thresholds,category):
+def approach_paper(dframe,thresholds,category='lung_carcinoma'):
     """use the specified thresholds from the paper to classify each patient (LC=1 and no LC=0)"""
     dframe, kept=remove_nan_dframe(dframe,category)
     (rows,columns)=dframe.shape
@@ -322,11 +322,8 @@ def prepare_data(dframe,cat,normalize,smote):
     length=range(0,len(labels))  #provide a integer to each label
     lut = dict(zip(labels, length)) #create dictionary of possible options
     markers=dframe.iloc[:,6:13] #TM
-    TMs=dframe.columns[6:13]
+    TMs=markers.columns
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
-        
-    if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
-        markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
         
     if extra==True:
         ages=dframe['age']
@@ -337,6 +334,10 @@ def prepare_data(dframe,cat,normalize,smote):
         transf={'Nooit':0,'Verleden':1,'Actief':2}   #dictonary to transform the strings to integers
         smoking=smoking.map(transf)   #map the strings in the list with the provided dictionary
         markers['smoking_history'] = smoking  #add the smoking history to the dataframe with the tumor markers
+        TMs=markers.columns   #column names also include ages and smoking
+        
+    if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
+        markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
         
     X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2)   #split the data in a training set and a test set
     
@@ -348,15 +349,16 @@ def prepare_data(dframe,cat,normalize,smote):
         
     if normalize==True and smote==True:   #scale each of the columns of the tumor markers
         X_test = pd.DataFrame(X_test, columns=markers.columns)
-        markers[TMs] = preprocessing.scale(markers.values[:,0:7],axis=0)
-        X_train[TMs] = preprocessing.scale(X_train.values[:,0:7],axis=0)
-        X_test[TMs] = preprocessing.scale(X_test.values[:,0:7],axis=0)
+        markers[TMs] = preprocessing.scale(markers.values[:,0:len(TMs)],axis=0)
+        X_train[TMs] = preprocessing.scale(X_train.values[:,0:len(TMs)],axis=0)
+        X_test[TMs] = preprocessing.scale(X_test.values[:,0:len(TMs)],axis=0)
+        
     
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
 def det_CVscore(clf,markers,y_true):
     '''apply cross validation score and determine the mean and standard deviation of the score'''
-    score=cross_val_score(clf,markers,y_true,cv=10,scoring='roc_auc')  #cross validation step
+    score=cross_val_score(clf,markers,y_true,cv=50,scoring='roc_auc')  #cross validation step
     score_f1=cross_val_score(clf,markers,y_true,cv=10,scoring='f1')
     CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
     
