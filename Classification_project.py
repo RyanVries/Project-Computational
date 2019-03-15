@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import datetime
 from astropy.table import Table
-from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report, f1_score
+from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report, f1_score, precision_score
 from sklearn import tree, preprocessing
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
@@ -243,7 +243,7 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
     TMs=dframe.columns[6:13]    #names of all tumor markers
-    threshold=np.linspace(0,200,400)   #define possible thresholds
+    threshold=np.linspace(0,125,400)   #define possible thresholds
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
@@ -269,6 +269,8 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
                     metric[index,i]=auc(fpr, tpr)   #determine AUC of each threshold
                 elif used_metric=='F1':
                     metric[index,i]=f1_score(y_res,LC_result)
+                elif used_metric=='precision':
+                    metric[index,i]=precision_score(y_res,LC_result)
         means=np.mean(metric,axis=1)
         stand=np.std(metric,axis=1)
         plt.errorbar(threshold,means,yerr=stand,linestyle='-',ecolor='black')
@@ -284,11 +286,16 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
             bot,top=find_nearest(means,t_range,spot)
             string='-'.join([str(threshold[bot]),str(threshold[top])])
             optimal_range[TMs[mi]]=string
-            optimal_means[TMs[mi]]=means[spot]
+            optimal_means[TMs[mi]]=threshold[spot]
         
         elif used_metric=='F1':
             spot=np.argmax(means)
-            optimal_means[TMs[mi]]=means[spot]
+            optimal_means[TMs[mi]]=threshold[spot]
+        elif used_metric=='precision':
+            means=np.where(means>0.98,0,means)
+            spot=np.argmax(means)
+            optimal_means[TMs[mi]]=threshold[spot]
+            
         
     return optimal_range,optimal_means
     
