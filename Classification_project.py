@@ -11,6 +11,10 @@ from astropy.table import Table
 from sklearn.metrics import confusion_matrix, roc_curve, auc, roc_auc_score, classification_report, f1_score, precision_score
 from sklearn import tree, preprocessing
 from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, StratifiedShuffleSplit
 import numpy as np
 from decimal import getcontext, Decimal  
@@ -19,7 +23,7 @@ import graphviz
 from imblearn.over_sampling import SMOTE
 from random import randint
 import warnings
-warnings.filterwarnings("ignore")
+#warnings.filterwarnings("ignore")
 
 
 def read_data(file_loc):
@@ -324,7 +328,7 @@ def prepare_data(dframe,cat,normalize,smote):
     markers=dframe.iloc[:,6:13] #TM
     TMs=markers.columns
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
-        
+          
     if extra==True:
         ages=dframe['age']
         ages=np.rint(ages)  #round the ages to the nearest integer
@@ -397,6 +401,62 @@ def Logistic_clas(dframe,cat,save_roc):
     auc_LC=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Logistic Regression classifier')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Logistic Regression classifier',cat) #Table of statistics
     return auc_LC,PPV,NPV,sensitivity,specificity, report, CV_score
+
+def SVM_clas(dframe,cat,save_roc):
+    '''Set up a Supported vector machine classifier and train on data after which the predictions of the test data are evaluated'''
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    
+    clf = SVC()    #initialization of the classifier
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    clf.fit(X_train,y_train)  #fitting training set
+    
+    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    auc_SVM=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='SVM')     #AUC and ROC curve 
+    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'SVM',cat) #Table of statistics
+    return auc_SVM,PPV,NPV,sensitivity,specificity, report, CV_score
+    
+def Naive(dframe,cat,save_roc):
+    '''Set up a Gaussian Naive Bayes classifier and train on data after which the predictions of the test data are evaluated'''
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    
+    clf = GaussianNB()    #initialization of the classifier
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    clf.fit(X_train,y_train)  #fitting training set
+    
+    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    auc_NB=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Naive Bayes')     #AUC and ROC curve 
+    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Naive Bayes',cat) #Table of statistics
+    return auc_NB,PPV,NPV,sensitivity,specificity, report, CV_score
+
+def RandomF(dframe,cat,save_roc):
+    '''Set up a Random Forest classifier and train on data after which the predictions of the test data are evaluated'''
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    
+    clf = RandomForestClassifier()    #initialization of the classifier
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    clf.fit(X_train,y_train)  #fitting training set
+    
+    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    auc_RF=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Random Forest')     #AUC and ROC curve 
+    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Random Forest',cat) #Table of statistics
+    return auc_RF,PPV,NPV,sensitivity,specificity, report, CV_score
+
+def NN(dframe,cat,save_roc):
+    '''Set up a k nearest neighbors classifier and train on data after which the predictions of the test data are evaluated'''
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    
+    clf = KNeighborsClassifier()    #initialization of the classifier
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    clf.fit(X_train,y_train)  #fitting training set
+    
+    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    auc_NN=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='k Nearest Neighbors')     #AUC and ROC curve 
+    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'k Nearest Neighbors',cat) #Table of statistics
+    return auc_NN,PPV,NPV,sensitivity,specificity, report, CV_score
 
 def evaluate_stats(ground,prediction,labels):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
