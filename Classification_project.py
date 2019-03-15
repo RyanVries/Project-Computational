@@ -353,12 +353,11 @@ def prepare_data(dframe,cat,normalize,smote):
         X_train[TMs] = preprocessing.scale(X_train.values[:,0:len(TMs)],axis=0)
         X_test[TMs] = preprocessing.scale(X_test.values[:,0:len(TMs)],axis=0)
         
-    
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
 def det_CVscore(clf,markers,y_true):
     '''apply cross validation score and determine the mean and standard deviation of the score'''
-    n=10
+    n=100
     sss = StratifiedShuffleSplit(n_splits=n, test_size=0.2)
     score=[]
     score_f1=[]
@@ -373,7 +372,7 @@ def det_CVscore(clf,markers,y_true):
     
 def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train it after which predictions are made for the test set and statistics for this classification are calculated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True) #prepare the data
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
     CV_score=det_CVscore(clf,markers,y_true)  #apply cross validation and get score
     clf.fit(X_train,y_train)  #fit classifier to training data
