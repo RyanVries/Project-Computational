@@ -8,10 +8,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import datetime
 from astropy.table import Table
-from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report, f1_score, precision_score
+from sklearn.metrics import confusion_matrix, roc_curve, auc, roc_auc_score, classification_report, f1_score, precision_score
 from sklearn import tree, preprocessing
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, StratifiedShuffleSplit
 import numpy as np
 from decimal import getcontext, Decimal  
 from sklearn.tree import export_graphviz
@@ -358,8 +358,15 @@ def prepare_data(dframe,cat,normalize,smote):
 
 def det_CVscore(clf,markers,y_true):
     '''apply cross validation score and determine the mean and standard deviation of the score'''
-    score=cross_val_score(clf,markers,y_true,cv=50,scoring='roc_auc')  #cross validation step
-    score_f1=cross_val_score(clf,markers,y_true,cv=10,scoring='f1')
+    n=10
+    sss = StratifiedShuffleSplit(n_splits=n, test_size=0.2)
+    score=[]
+    score_f1=[]
+    for train_index, test_index in sss.split(markers, y_true):
+        clf.fit(markers.iloc[train_index],y_true.iloc[train_index])
+        pred=clf.predict(markers.iloc[test_index])
+        score.append(roc_auc_score(y_true.iloc[test_index],pred))
+        score_f1.append(f1_score(y_true.iloc[test_index],pred))
     CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
     
     return CV_score
@@ -368,11 +375,10 @@ def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train it after which predictions are made for the test set and statistics for this classification are calculated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
+    CV_score=det_CVscore(clf,markers,y_true)  #apply cross validation and get score
     clf.fit(X_train,y_train)  #fit classifier to training data
     #visualize_DT(clf,dframe.columns[6:13],labels)
 
-    CV_score=det_CVscore(clf,markers.values,y_true)  #apply cross validation and get score
-    
     predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #process the result and provide statistics
     auc_DT=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    #AUC and ROC curve of classification
@@ -384,10 +390,9 @@ def Logistic_clas(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     
     clf = LogisticRegression(penalty='l2',solver='liblinear')    #initialization of the classifier
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    CV_score=det_CVscore(clf,markers.values,y_true)  #cross validation
-
     predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
     auc_LC=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Logistic Regression classifier')     #AUC and ROC curve 
