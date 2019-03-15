@@ -109,28 +109,28 @@ def approach_paper(dframe,thresholds,category):
     
     ground = truth.map(lut)   #the ground truth of each patient mapped with the labels dictionary to have a binary problem
     gr=ground.tolist()
-    PPVm=np.zeros(7)
+    #statistics for each individual marker
+    PPVm=np.zeros(7)  
     NPVm=np.zeros(7)
     sensm=np.zeros(7)
     specm=np.zeros(7)
     
     LC_results=np.zeros(rows)   #results of the thresholding operation
     for i in range(6,13):   #look at all tumor markers
-        TM=dframe.columns[i]
-        LC_marker=np.zeros(rows)
+        TM=dframe.columns[i]  #current marker
+        LC_marker=np.zeros(rows)   #classification for each individual marker
         if TM in thresholds.keys():     #see if a threshold is present for the tumor marker
             for pat in range(0,rows):   #look at each patient 
                 if dframe.iloc[pat,i]>=thresholds[TM]:   #if the TM concentration exceeds the threshold at patient to list and classify as having LC
                     LC_results[pat]=1
                     LC_marker[pat]=1
-            P,N,S,E,_=evaluate_stats(gr,LC_marker,labels)  #evaluate the operation by calculating the programmed statistical values
+            P,N,S,E,_=evaluate_stats(gr,LC_marker,labels)  #calculate the statistics for each individual marker
             PPVm[i-6]=P[1]
             NPVm[i-6]=N[1]
             sensm[i-6]=S[1]
             specm[i-6]=E[1]
-    print_stats_adv(PPVm,NPVm,sensm,specm,dframe.columns[6:13],'Individual thresholds',category_to_investigate)   #provide the statistics in a table
+    print_stats_adv(PPVm,NPVm,sensm,specm,dframe.columns[6:13],'Individual thresholds',category_to_investigate)   #provide the statistics in a table for each individual marker
     predictions=LC_results
-    
     
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)  #evaluate the operation by calculaton the programmed statistical values
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
@@ -232,16 +232,17 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     return overall_optimals
 
 def find_nearest(array, value, pos):
+    '''calculate the range of the threshold by taking into account the standard deviation of the max metric value'''
     array = np.asarray(array)
-    diff = array - value
-    top=diff[pos:]
-    bot=diff[:pos]
-    top_idx=top.argmin()+pos
-    bot_idx=bot.argmin()
+    diff = array - value  #value to consider
+    top=diff[pos:]   #threshold values above maximum
+    bot=diff[:pos]   #threshold values below maximum
+    top_idx=top.argmin()+pos  #position where metric value is equal to max metric minus its std 
+    bot_idx=bot.argmin()   #position where metric value is equal to max metric minus its std 
     return bot_idx,top_idx
 
 def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
-    '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
+    '''determine the optimal threshold for each marker by applying Bootstrap and optimalization of the chosen metric'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
     TMs=dframe.columns[6:13]    #names of all tumor markers
@@ -249,33 +250,34 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
     labels=['No','Yes']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
-    k=5
-    selection=dframe.index.tolist()
-    optimal_range=dict()
-    optimal_means=dict()
+    k=5   #number of times boorstrap is applied
+    selection=dframe.index.tolist()   #the indexes which can be selected to use
+    optimal_range=dict()   #the optimal range for each threshold
+    optimal_means=dict()   #the threshold value with highest mean
     
     for mi,marker in enumerate(range(6,13)):  #look at each marker separately
         metric=np.zeros((len(threshold),k))   #make room in memory for the AUCs
-        for i in range(0,k):
-            ti = [randint(0, len(dframe[TMs[mi]])-1) for p in range(0, len(dframe[TMs[mi]]))]
-            train_index=[selection[z] for z in ti]
+        for i in range(0,k):   #applying Bootstrap multiple times
+            ti = [randint(0, len(dframe[TMs[mi]])-1) for p in range(0, len(dframe[TMs[mi]]))]   #select random indices
+            train_index=[selection[z] for z in ti]  #select the indexes to be used which are present in de dataframe
             for index,thres in enumerate(threshold):   #loop over all of the possible threshold values
                 LC_result=np.zeros(len(train_index))  #make room in memory for classification
-                y_res=np.zeros(len(train_index))
-                for ind,f_idx in enumerate(train_index): 
+                y_res=np.zeros(len(train_index))  #the true results for this Bootstrap round
+                for ind,f_idx in enumerate(train_index):   #look at each selected index 
                     if (dframe.loc[f_idx,TMs[mi]])>=thres:   #classification process
                         LC_result[ind]=1
-                    y_res[ind]=y_true.loc[f_idx]
-                if used_metric=='AUC':
+                    y_res[ind]=y_true.loc[f_idx]  #correct classificaton accompanied with this selected index
+                if used_metric=='AUC':  
                     fpr, tpr, _ = roc_curve(y_res, LC_result)   #determine roc of each threshold
                     metric[index,i]=auc(fpr, tpr)   #determine AUC of each threshold
                 elif used_metric=='F1':
-                    metric[index,i]=f1_score(y_res,LC_result)
+                    metric[index,i]=f1_score(y_res,LC_result)  #F1 score
                 elif used_metric=='precision':
-                    metric[index,i]=precision_score(y_res,LC_result)
-        means=np.mean(metric,axis=1)
-        stand=np.std(metric,axis=1)
-        plt.errorbar(threshold,means,yerr=stand,linestyle='-',ecolor='black')
+                    metric[index,i]=precision_score(y_res,LC_result)  #precision score
+        means=np.mean(metric,axis=1)  #calculate means of the metric
+        stand=np.std(metric,axis=1)  #std of metric
+        #plot result for each individual marker
+        plt.errorbar(threshold,means,yerr=stand,linestyle='-',ecolor='black')  
         label=TMs[mi].split(' ')
         plt.xlabel('Threshold value '+label[1])
         plt.ylabel(used_metric)
@@ -283,22 +285,21 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
         plt.show()
         
         if used_metric=='AUC':
-            spot=np.argmax(means)
-            t_range=means[spot]-np.abs(stand[spot])
-            bot,top=find_nearest(means,t_range,spot)
-            string='-'.join([str(threshold[bot]),str(threshold[top])])
-            optimal_range[TMs[mi]]=string
-            optimal_means[TMs[mi]]=threshold[spot]
+            spot=np.argmax(means)  #place with highest mean metric score
+            t_range=means[spot]-np.abs(stand[spot])  #highest mean minus its standard deviation
+            bot,top=find_nearest(means,t_range,spot)  #threshold indexes which match the calculated value
+            string='-'.join([str(threshold[bot]),str(threshold[top])])  #range written in a string
+            optimal_range[TMs[mi]]=string  #add range to dict
+            optimal_means[TMs[mi]]=threshold[spot]   #add best threshold considering mean metric to dict
         
         elif used_metric=='F1':
-            spot=np.argmax(means)
-            optimal_means[TMs[mi]]=threshold[spot]
+            spot=np.argmax(means)  #place with highest mean metric score
+            optimal_means[TMs[mi]]=threshold[spot] #add best threshold considering mean metric to dict
         elif used_metric=='precision':
-            means=np.where(means>0.98,0,means)
-            spot=np.argmax(means)
-            optimal_means[TMs[mi]]=threshold[spot]
+            means=np.where(means>0.98,0,means) #every metric value which is to high to be considered as real/realistic is set to 0 
+            spot=np.argmax(means) #place with highest mean metric score
+            optimal_means[TMs[mi]]=threshold[spot] #add best threshold considering mean metric to dict
             
-        
     return optimal_range,optimal_means
     
 def visualize_DT(dtree,feature_names,class_names):
