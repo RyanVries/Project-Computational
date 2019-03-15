@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import datetime
 from astropy.table import Table
-from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report
+from sklearn.metrics import confusion_matrix, roc_curve, auc, classification_report, f1_score
 from sklearn import tree, preprocessing
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
@@ -107,6 +107,10 @@ def approach_paper(dframe,thresholds,category):
     
     ground = truth.map(lut)   #the ground truth of each patient mapped with the labels dictionary to have a binary problem
     gr=ground.tolist()
+    PPVm=np.zeros(7)
+    NPVm=np.zeros(7)
+    sensm=np.zeros(7)
+    specm=np.zeros(7)
     
     LC_results=np.zeros(rows)   #results of the thresholding operation
     for i in range(6,13):   #look at all tumor markers
@@ -117,8 +121,12 @@ def approach_paper(dframe,thresholds,category):
                 if dframe.iloc[pat,i]>=thresholds[TM]:   #if the TM concentration exceeds the threshold at patient to list and classify as having LC
                     LC_results[pat]=1
                     LC_marker[pat]=1
-            PPV,NPV,sensitivity,specificity,_=evaluate_stats(gr,LC_marker,labels)  #evaluate the operation by calculaton the programmed statistical values
-            print_stats(PPV[1],NPV[1],sensitivity[1],specificity[1],'Individual threshold '+TM,category_to_investigate)   #provide the statistics in a table
+            P,N,S,E,_=evaluate_stats(gr,LC_marker,labels)  #evaluate the operation by calculating the programmed statistical values
+            PPVm[i-6]=P[1]
+            NPVm[i-6]=N[1]
+            sensm[i-6]=S[1]
+            specm[i-6]=E[1]
+    print_stats_adv(PPVm,NPVm,sensm,specm,dframe.columns[6:13],'Individual thresholds',category_to_investigate)   #provide the statistics in a table
     predictions=LC_results
     
     
@@ -241,10 +249,12 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
     y_true=dframe[category].map(lut)    #map the true classification to binary values
     k=5
     selection=dframe.index.tolist()
-    optimal=dict()
+    optimal_range=dict()
+    optimal_means=dict()
+    used_metric='AUC'
     
     for mi,marker in enumerate(range(6,13)):  #look at each marker separately
-        AUCs=np.zeros((len(threshold),k))   #make room in memory for the AUCs
+        metric=np.zeros((len(threshold),k))   #make room in memory for the AUCs
         for i in range(0,k):
             ti = [randint(0, len(dframe[TMs[mi]])-1) for p in range(0, len(dframe[TMs[mi]]))]
             train_index=[selection[z] for z in ti]
@@ -255,24 +265,35 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma'):
                     if (dframe.loc[f_idx,TMs[mi]])>=thres:   #classification process
                         LC_result[ind]=1
                     y_res[ind]=y_true.loc[f_idx]
-                fpr, tpr, _ = roc_curve(y_res, LC_result)   #determine roc of each threshold
-                AUCs[index,i]=auc(fpr, tpr)   #determine AUC of each threshold
-        means=np.mean(AUCs,axis=1)
-        stand=np.std(AUCs,axis=1)
+                if used_metric=='AUC':
+                    fpr, tpr, _ = roc_curve(y_res, LC_result)   #determine roc of each threshold
+                    metric[index,i]=auc(fpr, tpr)   #determine AUC of each threshold
+                elif used_metric=='F1':
+                    metric[index,i]=f1_score(y_res,LC_result)
+        means=np.mean(metric,axis=1)
+        stand=np.std(metric,axis=1)
         plt.errorbar(threshold,means,yerr=stand,linestyle='-',ecolor='black')
         label=TMs[mi].split(' ')
         plt.xlabel('Threshold value '+label[1])
-        plt.ylabel('AUC')
-        plt.title('Threshold values versus AUC with Bootstrap method for the tumor marker: '+ label[0])
+        plt.ylabel(used_metric)
+        plt.title('Threshold values versus '+used_metric+ ' with Bootstrap method for the tumor marker: '+ label[0])
         plt.show()
         
+    if used_metric=='AUC':
         spot=np.argmax(means)
         t_range=means[spot]-np.abs(stand[spot])
         bot,top=find_nearest(means,t_range,spot)
         string='-'.join([str(threshold[bot]),str(threshold[top])])
-        optimal[TMs[mi]]=string
+        optimal_range[TMs[mi]]=string
+        optimal_means[TMs[mi]]=means[spot]
+        return optimal_range,optimal_means
         
-    return optimal
+    elif used_metric=='F1':
+        spot=np.argmax(means)
+        optimal_means[TMs[mi]]=means[spot]
+        return 0,optimal_means
+    return
+    
 
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
