@@ -360,7 +360,7 @@ def prepare_data(dframe,cat,normalize,smote):
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
 def det_CVscore(clf,markers,y_true):
-    '''apply cross validation score and determine the mean and standard deviation of the score'''
+    '''apply cross validation (Startified Shuffle Split) and determine the mean and standard deviation of the scores'''
     n=100
     sss = StratifiedShuffleSplit(n_splits=n, test_size=0.2)
     score=[]
@@ -370,6 +370,14 @@ def det_CVscore(clf,markers,y_true):
         pred=clf.predict(markers.iloc[test_index])
         score.append(roc_auc_score(y_true.iloc[test_index],pred))
         score_f1.append(f1_score(y_true.iloc[test_index],pred))
+    CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
+    
+    return CV_score
+
+def det_CVscore_sim(clf,markers,y_true):
+    '''apply cross validation score and determine the mean and standard deviation of the score'''
+    score=cross_val_score(clf,markers,y_true,cv=10,scoring='roc_auc')  #cross validation step
+    score_f1=cross_val_score(clf,markers,y_true,cv=10,scoring='f1')
     CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
     
     return CV_score
