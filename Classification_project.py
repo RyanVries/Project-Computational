@@ -23,7 +23,7 @@ import graphviz
 from imblearn.over_sampling import SMOTE
 from random import randint
 import warnings
-#warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")
 
 
 def read_data(file_loc):
@@ -278,6 +278,9 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
                     metric[index,i]=f1_score(y_res,LC_result)  #F1 score
                 elif used_metric=='precision':
                     metric[index,i]=precision_score(y_res,LC_result)  #precision score
+                elif used_metric=='specificity':
+                    _,_,_,specificity,_=evaluate_stats(y_res,LC_result,labels)
+                    metric[index,i]=specificity[1]
         means=np.mean(metric,axis=1)  #calculate means of the metric
         stand=np.std(metric,axis=1)  #std of metric
         #plot result for each individual marker
@@ -296,7 +299,7 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
             optimal_range[TMs[mi]]=string  #add range to dict
             optimal_means[TMs[mi]]=threshold[spot]   #add best threshold considering mean metric to dict
         
-        elif used_metric=='F1':
+        elif used_metric=='F1' or used_metric=='specificity':
             spot=np.argmax(means)  #place with highest mean metric score
             optimal_means[TMs[mi]]=threshold[spot] #add best threshold considering mean metric to dict
         elif used_metric=='precision':
@@ -311,7 +314,7 @@ def visualize_DT(dtree,feature_names,class_names):
     export_graphviz(dtree, out_file='tree.dot', feature_names = feature_names,class_names = class_names,rounded = True, proportion = False, precision = 2, filled = True)
     #(graph,) = pydot.graph_from_dot_file('tree.dot')
     #graph=graphviz.Source(dot_data)
-    graphviz.render('dot','png','C:/Users/s164616/Documents/MATLAB/Project Computational Biology')
+    #graphviz.render('dot','png','C:/Users/s164616/Documents/MATLAB/Project Computational Biology')
     return 
 
 def prepare_data(dframe,cat,normalize,smote):
@@ -367,7 +370,7 @@ def det_CVscore(clf,markers,y_true):
     score_f1=[]
     for train_index, test_index in sss.split(markers, y_true):
         clf.fit(markers.iloc[train_index],y_true.iloc[train_index])
-        pred=clf.predict(markers.iloc[test_index])
+        pred=clf.predict_proba(markers.iloc[test_index])
         score.append(roc_auc_score(y_true.iloc[test_index],pred))
         score_f1.append(f1_score(y_true.iloc[test_index],pred))
     CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
@@ -384,12 +387,13 @@ def det_CVscore_sim(clf,markers,y_true):
     
 def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train it after which predictions are made for the test set and statistics for this classification are calculated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True) #prepare the data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #apply cross validation and get score
+    CV_score=det_CVscore_sim(clf,markers,y_true)  #apply cross validation and get score
     clf.fit(X_train,y_train)  #fit classifier to training data
-    #visualize_DT(clf,dframe.columns[6:13],labels)
+    visualize_DT(clf,X_train.columns,labels)
 
+    
     predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #process the result and provide statistics
     auc_DT=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    #AUC and ROC curve of classification
@@ -400,12 +404,17 @@ def Logistic_clas(dframe,cat,save_roc):
     '''Set up a Logistic Regression classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     
+    (pats,_)=X_test.shape
     clf = LogisticRegression(penalty='l2',solver='liblinear')    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
-    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    for i in range(0,2):
+        if labels[i]=='Yes':
+            Y_index=i
+    predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    predictions=predictions[:,Y_index]
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_LC=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Logistic Regression classifier')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Logistic Regression classifier',cat) #Table of statistics
     return auc_LC,PPV,NPV,sensitivity,specificity, report, CV_score
@@ -414,12 +423,16 @@ def SVM_clas(dframe,cat,save_roc):
     '''Set up a Supported vector machine classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     
-    clf = SVC()    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    clf = SVC(probability=True)    #initialization of the classifier
+    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
-    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    for i in range(0,2):
+        if labels[i]=='Yes':
+            Y_index=i
+    predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    predictions=predictions[:,Y_index]
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_SVM=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='SVM')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'SVM',cat) #Table of statistics
     return auc_SVM,PPV,NPV,sensitivity,specificity, report, CV_score
@@ -429,11 +442,15 @@ def Naive(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     
     clf = GaussianNB()    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
-    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    for i in range(0,2):
+        if labels[i]=='Yes':
+            Y_index=i
+    predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    predictions=predictions[:,Y_index]
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_NB=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Naive Bayes')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Naive Bayes',cat) #Table of statistics
     return auc_NB,PPV,NPV,sensitivity,specificity, report, CV_score
@@ -443,11 +460,15 @@ def RandomF(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     
     clf = RandomForestClassifier()    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
-    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    for i in range(0,2):
+        if labels[i]=='Yes':
+            Y_index=i
+    predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    predictions=predictions[:,Y_index]
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_RF=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Random Forest')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Random Forest',cat) #Table of statistics
     return auc_RF,PPV,NPV,sensitivity,specificity, report, CV_score
@@ -457,11 +478,15 @@ def NN(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     
     clf = KNeighborsClassifier()    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
-    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #statistics
+    for i in range(0,2):
+        if labels[i]=='Yes':
+            Y_index=i
+    predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
+    predictions=predictions[:,Y_index]
+    PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_NN=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='k Nearest Neighbors')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'k Nearest Neighbors',cat) #Table of statistics
     return auc_NN,PPV,NPV,sensitivity,specificity, report, CV_score
@@ -541,6 +566,17 @@ def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
     print(t.meta['name'])  #print name of the table
     print(t)  #print Table
     return
+
+def get_upper(dframe,optr):
+    TMs=dframe.columns[6:13]
+    thres=dict()
+    for i in range(0,7):
+        TM=TMs[i]
+        waarde=optr[TM]
+        upper=waarde.split('-')[1]
+        thres[TM]=upper
+    return thres
+        
     
 category_to_investigate='lung_carcinoma'
 file_loc='data_new.csv'
@@ -554,3 +590,7 @@ if category_to_investigate=='lung_carcinoma':
     PPV_p,NPV_p,sensi_p,speci_p,report_p=approach_paper(dframe,thresholds,category_to_investigate)        
 aucDT,PPV_DT,NPV_DT,sensitivity_DT,specificity_DT, report_DT, CV_score_DT=decisionT(dframe,category_to_investigate,save_roc=False)
 aucLC,PPV_LC,NPV_LC,sensitivity_LC,specificity_LC, report_LC, CV_score_LC=Logistic_clas(dframe,category_to_investigate,save_roc=False)
+aucSVM,PPV_SVM,NPV_SVM,sensitivity_SVM,specificity_SVM, report_SVM, CV_score_SVM=SVM_clas(dframe,category_to_investigate,save_roc=False)
+aucNB,PPV_NB,NPV_NB,sensitivity_NB,specificity_NB, report_NB, CV_score_NB=Naive(dframe,category_to_investigate,save_roc=False)
+aucRF,PPV_RF,NPV_RF,sensitivity_RF,specificity_RF, report_RF, CV_score_RF=RandomF(dframe,category_to_investigate,save_roc=False)
+aucNN,PPV_NN,NPV_NN,sensitivity_NN,specificity_NN, report_NN, CV_score_NN=NN(dframe,category_to_investigate,save_roc=False)
