@@ -118,6 +118,7 @@ def approach_paper(dframe,thresholds,category='lung_carcinoma'):
     NPVm=np.zeros(7)
     sensm=np.zeros(7)
     specm=np.zeros(7)
+    AUCm=np.zeros(7)
     
     LC_results=np.zeros(rows)   #results of the thresholding operation
     for i in range(6,13):   #look at all tumor markers
@@ -133,11 +134,14 @@ def approach_paper(dframe,thresholds,category='lung_carcinoma'):
             NPVm[i-6]=N[1]
             sensm[i-6]=S[1]
             specm[i-6]=E[1]
-    print_stats_adv(PPVm,NPVm,sensm,specm,dframe.columns[6:13],'Individual thresholds',category_to_investigate)   #provide the statistics in a table for each individual marker
+            AUCm[i-6]=roc_auc_score(gr,LC_marker)
+    print_stats_adv(PPVm,NPVm,sensm,specm,AUCm,dframe.columns[6:13],'Individual thresholds',category_to_investigate)   #provide the statistics in a table for each individual marker
     predictions=LC_results
     
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)  #evaluate the operation by calculaton the programmed statistical values
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
+    A=roc_auc_score(gr,predictions)
+    AUC=[A,1-A]
+    print_stats_adv(PPV,NPV,sensitivity,specificity,AUC,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
     return PPV,NPV,sensitivity,specificity,report
 
 def plot_optimal(AUCs,thresholds,TMs,optimal):
@@ -397,7 +401,7 @@ def decisionT(dframe,cat,save_roc):
     predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #process the result and provide statistics
     auc_DT=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    #AUC and ROC curve of classification
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Decision Tree classifier',cat)  #show statistics in table
+    print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Decision Tree classifier',cat)  #show statistics in table
     return auc_DT,PPV,NPV,sensitivity,specificity, report, CV_score
 
 def Logistic_clas(dframe,cat,save_roc):
@@ -416,7 +420,7 @@ def Logistic_clas(dframe,cat,save_roc):
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_LC=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Logistic Regression classifier')     #AUC and ROC curve 
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Logistic Regression classifier',cat) #Table of statistics
+    print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Logistic Regression classifier',cat) #Table of statistics
     return auc_LC,PPV,NPV,sensitivity,specificity, report, CV_score
 
 def SVM_clas(dframe,cat,save_roc):
@@ -434,7 +438,7 @@ def SVM_clas(dframe,cat,save_roc):
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_SVM=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='SVM')     #AUC and ROC curve 
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'SVM',cat) #Table of statistics
+    print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'SVM',cat) #Table of statistics
     return auc_SVM,PPV,NPV,sensitivity,specificity, report, CV_score
     
 def Naive(dframe,cat,save_roc):
@@ -452,7 +456,7 @@ def Naive(dframe,cat,save_roc):
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_NB=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Naive Bayes')     #AUC and ROC curve 
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Naive Bayes',cat) #Table of statistics
+    print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Naive Bayes',cat) #Table of statistics
     return auc_NB,PPV,NPV,sensitivity,specificity, report, CV_score
 
 def RandomF(dframe,cat,save_roc):
@@ -470,7 +474,7 @@ def RandomF(dframe,cat,save_roc):
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_RF=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Random Forest')     #AUC and ROC curve 
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'Random Forest',cat) #Table of statistics
+    print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Random Forest',cat) #Table of statistics
     return auc_RF,PPV,NPV,sensitivity,specificity, report, CV_score
 
 def NN(dframe,cat,save_roc):
@@ -488,7 +492,7 @@ def NN(dframe,cat,save_roc):
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_NN=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='k Nearest Neighbors')     #AUC and ROC curve 
-    print_stats_adv(PPV,NPV,sensitivity,specificity,labels,'k Nearest Neighbors',cat) #Table of statistics
+    print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'k Nearest Neighbors',cat) #Table of statistics
     return auc_NN,PPV,NPV,sensitivity,specificity, report, CV_score
 
 def evaluate_stats(ground,prediction,labels):
@@ -530,7 +534,7 @@ def print_roc(fpr_keras, tpr_keras,auc_keras,save_roc,category,label,classifier)
     
 def roc_auc(y_true,predictions,category,save_roc,dic,classifier):
     '''calculate the FPR and TPR necessary for the ROC curve and calculate the AUC of this curve'''  
-    if len(np.unique(y_true))>2 or len(np.unique(predictions))>2:     #if there are more then two labels then compute ROC curve and ROC area for each class
+    if len(np.unique(y_true))>2:     #if there are more then two labels then compute ROC curve and ROC area for each class
         fpr = dict() #False positive rates
         tpr = dict()  #True positive rates
         AUC = dict() #AUC values
@@ -558,11 +562,15 @@ def print_stats(PPV,NPV,sensi,speci,classifier,category):
     print(t)  #print Table
     return
 
-def print_stats_adv(PPV,NPV,sensi,speci,labels,classifier,category):
+def print_stats_adv(PPV,NPV,sensi,speci,AUC,labels,classifier,category):
     '''shows for each label the relevant statistical values. where the label is seen as the positive on the stated row'''
     getcontext().prec = 4  #significance of the statistical numbers
-    data=[tuple(labels),tuple([Decimal(x) * 100 for x in PPV]),tuple([Decimal(x) * 100 for x in NPV]),tuple([Decimal(x) * 100 for x in sensi]),tuple([Decimal(x) * 100 for x in speci])]  #list of all statistical data
-    t=Table(data, names=('positive labels','PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values for the '+classifier+' of the class: '+category})  #make the table
+    if type(AUC)==bool:
+        data=[tuple(labels),tuple([Decimal(x) * 100 for x in PPV]),tuple([Decimal(x) * 100 for x in NPV]),tuple([Decimal(x) * 100 for x in sensi]),tuple([Decimal(x) * 100 for x in speci])]  #list of all statistical data
+        t=Table(data, names=('positive labels','PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)'),meta={'name':'Statistical values for the '+classifier+' of the class: '+category})  #make the table
+    else:
+        data=[tuple(labels),tuple([Decimal(x) * 100 for x in PPV]),tuple([Decimal(x) * 100 for x in NPV]),tuple([Decimal(x) * 100 for x in sensi]),tuple([Decimal(x) * 100 for x in speci]),tuple([Decimal(x) * 100 for x in AUC])]  #list of all statistical data
+        t=Table(data, names=('positive labels','PPV (%)','NPV (%)','Sensitivity (%)','Specificity (%)','AUC'),meta={'name':'Statistical values for the '+classifier+' of the class: '+category})  #make the table
     print(t.meta['name'])  #print name of the table
     print(t)  #print Table
     return
