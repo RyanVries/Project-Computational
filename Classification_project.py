@@ -324,7 +324,7 @@ def visualize_DT(dtree,feature_names,class_names):
 def prepare_data(dframe,cat,normalize,smote):
     '''prepare the data for the classifier by applying mapping and splitting the data and if specified oversampling and/or normalization'''
     dframe, kept=remove_nan_dframe(dframe,cat)  #remove all Nan since these do not contribute to the classifier
-    extra=True  #provide additional data to the classifiers of age and smoking history
+    extra=False  #provide additional data to the classifiers of age and smoking history
     if extra==True: #remove the Nan's for the ages and smoking history if data will have to be included
         dframe,_=remove_nan_int(dframe,'age')
         dframe,_=remove_nan_dframe(dframe,'smoking_history')
@@ -413,8 +413,12 @@ def Logistic_clas(dframe,cat,save_roc):
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    for i in range(0,2):
-        if labels[i]=='Yes':
+    if cat=='lung_carcinoma':
+        string='Yes'
+    elif cat=='cancer_type':
+        string='NSCLC'
+    for i in range(0,len(labels)):
+        if labels[i]==string:
             Y_index=i
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
@@ -431,8 +435,12 @@ def SVM_clas(dframe,cat,save_roc):
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    for i in range(0,2):
-        if labels[i]=='Yes':
+    if cat=='lung_carcinoma':
+        string='Yes'
+    elif cat=='cancer_type':
+        string='NSCLC'
+    for i in range(0,len(labels)):
+        if labels[i]==string:
             Y_index=i
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
@@ -449,8 +457,12 @@ def Naive(dframe,cat,save_roc):
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    for i in range(0,2):
-        if labels[i]=='Yes':
+    if cat=='lung_carcinoma':
+        string='Yes'
+    elif cat=='cancer_type':
+        string='NSCLC'
+    for i in range(0,len(labels)):
+        if labels[i]==string:
             Y_index=i
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
@@ -467,8 +479,12 @@ def RandomF(dframe,cat,save_roc):
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    for i in range(0,2):
-        if labels[i]=='Yes':
+    if cat=='lung_carcinoma':
+        string='Yes'
+    elif cat=='cancer_type':
+        string='NSCLC'
+    for i in range(0,len(labels)):
+        if labels[i]==string:
             Y_index=i
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
@@ -485,8 +501,12 @@ def NN(dframe,cat,save_roc):
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    for i in range(0,2):
-        if labels[i]=='Yes':
+    if cat=='lung_carcinoma':
+        string='Yes'
+    elif cat=='cancer_type':
+        string='NSCLC'
+    for i in range(0,len(labels)):
+        if labels[i]==string:
             Y_index=i
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
@@ -585,6 +605,35 @@ def get_upper(dframe,optr):
         thres[TM]=upper
     return thres
         
+def make_hist(dframe,cat,thres):
+    dframe,_=remove_nan_dframe(dframe,cat)
+    column=dframe[cat]
+    labels=column.unique()
+    markers=dframe.iloc[:,6:13]
+    TMs=markers.columns
+    for i in range(0,len(TMs)):
+        markerY=[]
+        markerN=[]
+        TM=TMs[i]
+        marker=markers[TM]
+        for k in column.index:
+            if column.loc[k]==labels[0]:
+                markerY.append(marker.loc[k])
+            elif column.loc[k]==labels[1]:
+                markerN.append(marker.loc[k])
+        plt.figure()
+        plt.hist([markerY,markerN],bins=200,color=['orange', 'green'])
+        plt.legend(labels)
+        stop1=np.mean(markerY)+3*abs(np.std(markerY))
+        stop2=np.mean(markerN)+3*abs(np.std(markerN))
+        stop=np.max([stop1,stop2])
+        plt.xlim([0,stop])
+        if TM in thres.keys():
+            plt.axvline(thres[TM], color='k', linestyle='dashed', linewidth=1)
+        plt.title('Histogram of marker: '+TM +' for class: '+cat)
+        plt.show()
+        
+    return
     
 category_to_investigate='lung_carcinoma'
 file_loc='data_new.csv'
