@@ -22,6 +22,7 @@ from sklearn.tree import export_graphviz
 import graphviz
 from imblearn.over_sampling import SMOTE
 from random import randint
+from inspect import signature
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -596,13 +597,14 @@ def print_stats_adv(PPV,NPV,sensi,speci,AUC,labels,classifier,category):
     return
 
 def get_upper(dframe,optr):
-    TMs=dframe.columns[6:13]
-    thres=dict()
-    for i in range(0,7):
-        TM=TMs[i]
-        waarde=optr[TM]
-        upper=waarde.split('-')[1]
-        thres[TM]=upper
+    '''get the upper value of the threshold range'''
+    TMs=dframe.columns[6:13]    #tumor markers
+    thres=dict()    #dictionary for the upper values
+    for i in range(0,7):   #look at each marker
+        TM=TMs[i]    #current marker name
+        waarde=optr[TM]   #range of the marker
+        upper=waarde.split('-')[1]   #only take upper value
+        thres[TM]=upper    #store upper value in new dictionary
     return thres
         
 def make_hist(dframe,cat,thres):
@@ -616,6 +618,7 @@ def make_hist(dframe,cat,thres):
         markerN=[]
         TM=TMs[i]
         marker=markers[TM]
+        label=TM.split(' ')
         for k in column.index:
             if column.loc[k]==labels[0]:
                 markerY.append(marker.loc[k])
@@ -626,14 +629,36 @@ def make_hist(dframe,cat,thres):
         plt.legend(labels)
         stop1=np.mean(markerY)+3*abs(np.std(markerY))
         stop2=np.mean(markerN)+3*abs(np.std(markerN))
-        stop=np.max([stop1,stop2])
-        plt.xlim([0,stop])
         if TM in thres.keys():
             plt.axvline(thres[TM], color='k', linestyle='dashed', linewidth=1)
-        plt.title('Histogram of marker: '+TM +' for class: '+cat)
+            stop=np.max([stop1,stop2,thres[TM]])
+        else:
+            stop=np.max([stop1,stop2])
+        plt.xlim([0,stop])
+        plt.title('Histogram of marker: '+label[0] +' for class: '+cat)
+        plt.xlabel('Concentration '+label[1])
+        plt.ylabel('Number of occurrences')
         plt.show()
         
     return
+
+def make_bar(PPV,NPV,sensi,speci,cat,classifiers):
+    #sig=signature(make_bar)
+    #pars=len(sig.parameters)-2
+    
+    #for i in range(0,pars):
+    fig,axes=plt.subplots(nrows=2,ncols=2)
+    axes[0,0].bar(classifiers,PPV)
+    axes[0,0].title()
+    axes[0,0].ylabel()
+    axes[0,0].xlabel()
+    
+    axes[0,1].bar(classifiers,NPV)
+    axes[1,0].bar(classifiers,sensi)
+    axes[1,1].bar(classifiers,speci)
+    
+    
+    return 
     
 category_to_investigate='lung_carcinoma'
 file_loc='data_new.csv'
