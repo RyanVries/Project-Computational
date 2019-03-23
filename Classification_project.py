@@ -12,7 +12,7 @@ from sklearn.metrics import confusion_matrix, roc_curve, auc, roc_auc_score, cla
 from sklearn import tree, preprocessing
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import GaussianNB, BernoulliNB
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, StratifiedShuffleSplit
@@ -143,7 +143,7 @@ def approach_paper(dframe,thresholds,category='lung_carcinoma'):
     A=roc_auc_score(gr,predictions)
     AUC=[A,1-A]
     print_stats_adv(PPV,NPV,sensitivity,specificity,AUC,labels,'Thresholds paper',category_to_investigate)   #provide the statistics in a table
-    return PPV,NPV,sensitivity,specificity,report
+    return PPV[1],NPV[1],sensitivity[1],specificity[1],report
 
 def plot_optimal(AUCs,thresholds,TMs,optimal):
     '''plot the continuous AUC values against the corresponding thresholds for each marker'''
@@ -246,8 +246,11 @@ def find_nearest(array, value, pos):
     diff = array - value  #value to consider
     top=diff[pos:]   #threshold values above maximum
     bot=diff[:pos]   #threshold values below maximum
-    top_idx=top.argmin()+pos  #position where metric value is equal to max metric minus its std 
-    bot_idx=bot.argmin()   #position where metric value is equal to max metric minus its std 
+    bot=bot<0
+    top=top<0
+    np.flip(bot)
+    top_idx=top.argmax()-1+pos  #position where metric value is equal to max metric minus its std 
+    bot_idx=pos-bot.argmax()-1   #position where metric value is equal to max metric minus its std 
     return bot_idx,top_idx
 
 def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
@@ -325,21 +328,24 @@ def visualize_DT(dtree,feature_names,class_names):
 def prepare_data(dframe,cat,normalize,smote):
     '''prepare the data for the classifier by applying mapping and splitting the data and if specified oversampling and/or normalization'''
     dframe, kept=remove_nan_dframe(dframe,cat)  #remove all Nan since these do not contribute to the classifier
-    extra=False  #provide additional data to the classifiers of age and smoking history
+    extra=True  #provide additional data to the classifiers of age and smoking history
     if extra==True: #remove the Nan's for the ages and smoking history if data will have to be included
         dframe,_=remove_nan_int(dframe,'age')
         dframe,_=remove_nan_dframe(dframe,'smoking_history')
     y_true=dframe[cat]
-    labels=y_true.unique()  #determine unique labels
-    length=range(0,len(labels))  #provide a integer to each label
-    lut = dict(zip(labels, length)) #create dictionary of possible options
+    if cat=='lung_carcinoma':
+        labels=['No', 'Yes']  #determine unique labels
+    elif cat=='cancer_type':
+        labels=['SCLC','NSCLC']
+    #length=range(0,len(labels))  #provide a integer to each label
+    lut = dict(zip(labels, [0,1])) #create dictionary of possible options
     markers=dframe.iloc[:,6:13] #TM
     TMs=markers.columns
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
           
     if extra==True:
         ages=dframe['age']
-        ages=np.rint(ages)  #round the ages to the nearest integer
+        #ages=np.rint(ages)  #round the ages to the nearest integer
         markers['age'] = ages #add the ages to the dataframe with the tumor markers
         
         smoking=dframe['smoking_history'] 
@@ -347,12 +353,20 @@ def prepare_data(dframe,cat,normalize,smote):
         smoking=smoking.map(transf)   #map the strings in the list with the provided dictionary
         markers['smoking_history'] = smoking  #add the smoking history to the dataframe with the tumor markers
         TMs=markers.columns   #column names also include ages and smoking
-        
-    if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
-        markers = pd.DataFrame(preprocessing.scale(markers.values,axis=0),columns=markers.columns)
-        
+    
     X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2)   #split the data in a training set and a test set
     
+    col=markers.columns
+    X_train=pd.DataFrame(X_train,columns=col)
+    X_test=pd.DataFrame(X_test,columns=col)
+    
+    if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
+        scaler = preprocessing.StandardScaler()
+        markers = scaler.fit_transform(markers.values)
+        scaler.fit(X_train.values[:,0:len(TMs)])
+        X_train[TMs] = scaler.transform(X_train.values[:,0:len(TMs)])
+        X_test[TMs] = scaler.transform(X_test.values[:,0:len(TMs)])
+        
     if smote==True:     #apply synthetic Minority Over-sampling if specified (usually for skewed data distribution)
         sm = SMOTE(random_state=42)   #initialization
         name=markers.columns   #names of the TM's
@@ -360,10 +374,11 @@ def prepare_data(dframe,cat,normalize,smote):
         X_train=pd.DataFrame(X_train,columns=name)   #convert the TM list to a Dataframe
         
     if normalize==True and smote==True:   #scale each of the columns of the tumor markers
-        X_test = pd.DataFrame(X_test, columns=markers.columns)
-        markers[TMs] = preprocessing.scale(markers.values[:,0:len(TMs)],axis=0)
-        X_train[TMs] = preprocessing.scale(X_train.values[:,0:len(TMs)],axis=0)
-        X_test[TMs] = preprocessing.scale(X_test.values[:,0:len(TMs)],axis=0)
+        scaler2 = preprocessing.StandardScaler()
+        markers[TMs] = scaler2.fit_transform(markers.values[:,0:len(TMs)])
+        scaler2.fit(X_train.values[:,0:len(TMs)])
+        X_train[TMs] = scaler2.transform(X_train.values[:,0:len(TMs)])
+        X_test[TMs] = scaler2.transform(X_test.values[:,0:len(TMs)])
         
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
@@ -389,132 +404,137 @@ def det_CVscore_sim(clf,markers,y_true):
     CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
     
     return CV_score
+
+def get_label(labels,cat):
+    if cat=='lung_carcinoma':
+        string='Yes'
+    elif cat=='cancer_type':
+        string='NSCLC'
+    for i in range(0,len(labels)):
+        if labels[i]==string:
+            Y_index=i
+    return Y_index
     
 def decisionT(dframe,cat,save_roc):
     '''Set up a decision tree classifier and train it after which predictions are made for the test set and statistics for this classification are calculated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=True) #prepare the data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=False) #prepare the data
+    X_train=markers
+    y_train=y_true
+    
+    
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #apply cross validation and get score
     clf.fit(X_train,y_train)  #fit classifier to training data
     visualize_DT(clf,X_train.columns,labels)
 
-    
+    Y_index=get_label(labels,cat)
+    assert clf.classes_[Y_index]==1
     predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #process the result and provide statistics
     auc_DT=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    #AUC and ROC curve of classification
     print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Decision Tree classifier',cat)  #show statistics in table
-    return auc_DT,PPV,NPV,sensitivity,specificity, report, CV_score
+    return auc_DT,PPV[Y_index],NPV[Y_index],sensitivity[Y_index],specificity[Y_index], report, CV_score
 
 def Logistic_clas(dframe,cat,save_roc):
     '''Set up a Logistic Regression classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    X_train=markers
+    y_train=y_true
     
-    (pats,_)=X_test.shape
+    
     clf = LogisticRegression(penalty='l2',solver='liblinear')    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    if cat=='lung_carcinoma':
-        string='Yes'
-    elif cat=='cancer_type':
-        string='NSCLC'
-    for i in range(0,len(labels)):
-        if labels[i]==string:
-            Y_index=i
+    Y_index=get_label(labels,cat)
+    assert clf.classes_[Y_index]==1
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_LC=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Logistic Regression classifier')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Logistic Regression classifier',cat) #Table of statistics
-    return auc_LC,PPV,NPV,sensitivity,specificity, report, CV_score
+    return auc_LC,PPV[Y_index],NPV[Y_index],sensitivity[Y_index],specificity[Y_index], report, CV_score
 
 def SVM_clas(dframe,cat,save_roc):
     '''Set up a Supported vector machine classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    X_train=markers
+    y_train=y_true
+    
     
     clf = SVC(probability=True)    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    if cat=='lung_carcinoma':
-        string='Yes'
-    elif cat=='cancer_type':
-        string='NSCLC'
-    for i in range(0,len(labels)):
-        if labels[i]==string:
-            Y_index=i
+    Y_index=get_label(labels,cat)
+    assert clf.classes_[Y_index]==1
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_SVM=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='SVM')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'SVM',cat) #Table of statistics
-    return auc_SVM,PPV,NPV,sensitivity,specificity, report, CV_score
+    return auc_SVM,PPV[Y_index],NPV[Y_index],sensitivity[Y_index],specificity[Y_index], report, CV_score
     
 def Naive(dframe,cat,save_roc):
     '''Set up a Gaussian Naive Bayes classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    X_train=markers
+    y_train=y_true
+    
     
     clf = GaussianNB()    #initialization of the classifier
+    #clf=BernoulliNB()
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    if cat=='lung_carcinoma':
-        string='Yes'
-    elif cat=='cancer_type':
-        string='NSCLC'
-    for i in range(0,len(labels)):
-        if labels[i]==string:
-            Y_index=i
+    Y_index=get_label(labels,cat)
+    assert clf.classes_[Y_index]==1
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_NB=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Naive Bayes')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Naive Bayes',cat) #Table of statistics
-    return auc_NB,PPV,NPV,sensitivity,specificity, report, CV_score
+    return auc_NB,PPV[Y_index],NPV[Y_index],sensitivity[Y_index],specificity[Y_index], report, CV_score
 
 def RandomF(dframe,cat,save_roc):
     '''Set up a Random Forest classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    X_train=markers
+    y_train=y_true
     
-    clf = RandomForestClassifier()    #initialization of the classifier
+    
+    clf = RandomForestClassifier(n_estimators=200,max_features=None)    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    if cat=='lung_carcinoma':
-        string='Yes'
-    elif cat=='cancer_type':
-        string='NSCLC'
-    for i in range(0,len(labels)):
-        if labels[i]==string:
-            Y_index=i
+    Y_index=get_label(labels,cat)
+    assert clf.classes_[Y_index]==1
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_RF=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Random Forest')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'Random Forest',cat) #Table of statistics
-    return auc_RF,PPV,NPV,sensitivity,specificity, report, CV_score
+    return auc_RF,PPV[Y_index],NPV[Y_index],sensitivity[Y_index],specificity[Y_index], report, CV_score
 
 def NN(dframe,cat,save_roc):
     '''Set up a k nearest neighbors classifier and train on data after which the predictions of the test data are evaluated'''
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    X_train=markers
+    y_train=y_true
     
-    clf = KNeighborsClassifier()    #initialization of the classifier
+    
+    clf = KNeighborsClassifier(algorithm='auto')    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
-    if cat=='lung_carcinoma':
-        string='Yes'
-    elif cat=='cancer_type':
-        string='NSCLC'
-    for i in range(0,len(labels)):
-        if labels[i]==string:
-            Y_index=i
+    Y_index=get_label(labels,cat)
+    assert clf.classes_[Y_index]==1
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
     auc_NN=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='k Nearest Neighbors')     #AUC and ROC curve 
     print_stats_adv(PPV,NPV,sensitivity,specificity,False,labels,'k Nearest Neighbors',cat) #Table of statistics
-    return auc_NN,PPV,NPV,sensitivity,specificity, report, CV_score
+    return auc_NN,PPV[Y_index],NPV[Y_index],sensitivity[Y_index],specificity[Y_index], report, CV_score
 
 def evaluate_stats(ground,prediction,labels):
     '''Evaluate the predictions by comparing them with the ground truth and calculate the desired statistical values'''
@@ -647,15 +667,37 @@ def make_bar(PPV,NPV,sensi,speci,cat,classifiers):
     #pars=len(sig.parameters)-2
     
     #for i in range(0,pars):
-    fig,axes=plt.subplots(nrows=2,ncols=2)
-    axes[0,0].bar(classifiers,PPV)
-    axes[0,0].title()
-    axes[0,0].ylabel()
-    axes[0,0].xlabel()
+    plt.figure()
+    plt.bar(classifiers,PPV)
+    plt.title('Histogram of the PPV of different classifiers')
+    plt.ylabel('PPV')
+    plt.xlabel('Classifier')
+    plt.xticks(rotation='vertical')
+    plt.show()
     
-    axes[0,1].bar(classifiers,NPV)
-    axes[1,0].bar(classifiers,sensi)
-    axes[1,1].bar(classifiers,speci)
+    plt.figure()
+    plt.bar(classifiers,NPV)
+    plt.title('Histogram of the NPV of different classifiers')
+    plt.ylabel('NPV')
+    plt.xlabel('Classifier')
+    plt.xticks(rotation='vertical')
+    plt.show()
+    
+    plt.figure()
+    plt.bar(classifiers,sensi)
+    plt.title('Histogram of the sensitivity of different classifiers')
+    plt.ylabel('Sensitivity')
+    plt.xlabel('Classifier')
+    plt.xticks(rotation='vertical')
+    plt.show()
+    
+    plt.figure()
+    plt.bar(classifiers,speci)
+    plt.title('Histogram of the specificity of different classifiers')
+    plt.ylabel('Specificity')
+    plt.xlabel('Classifier')
+    plt.xticks(rotation='vertical')
+    plt.show()
     
     
     return 
@@ -676,3 +718,4 @@ aucSVM,PPV_SVM,NPV_SVM,sensitivity_SVM,specificity_SVM, report_SVM, CV_score_SVM
 aucNB,PPV_NB,NPV_NB,sensitivity_NB,specificity_NB, report_NB, CV_score_NB=Naive(dframe,category_to_investigate,save_roc=False)
 aucRF,PPV_RF,NPV_RF,sensitivity_RF,specificity_RF, report_RF, CV_score_RF=RandomF(dframe,category_to_investigate,save_roc=False)
 aucNN,PPV_NN,NPV_NN,sensitivity_NN,specificity_NN, report_NN, CV_score_NN=NN(dframe,category_to_investigate,save_roc=False)
+make_bar([PPV_p,PPV_DT,PPV_LC,PPV_SVM,PPV_NB,PPV_RF,PPV_NN],[NPV_p,NPV_DT,NPV_LC,NPV_SVM,NPV_NB,NPV_RF,NPV_NN],[sensi_p,sensitivity_DT,sensitivity_LC,sensitivity_SVM,sensitivity_NB,sensitivity_RF,sensitivity_NN],[speci_p,specificity_DT,specificity_LC,specificity_SVM,specificity_NB,specificity_RF,specificity_NN],category_to_investigate,['Paper','Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors'])
