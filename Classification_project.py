@@ -420,6 +420,8 @@ def decisionT(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=False,smote=False) #prepare the data
     X_train=markers
     y_train=y_true
+    X_test=markers
+    y_test=y_true
     
     
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
@@ -440,7 +442,8 @@ def Logistic_clas(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     X_train=markers
     y_train=y_true
-    
+    X_test=markers
+    y_test=y_true
     
     clf = LogisticRegression(penalty='l2',solver='liblinear')    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
@@ -460,7 +463,8 @@ def SVM_clas(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     X_train=markers
     y_train=y_true
-    
+    X_test=markers
+    y_test=y_true
     
     clf = SVC(probability=True)    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
@@ -480,7 +484,8 @@ def Naive(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     X_train=markers
     y_train=y_true
-    
+    X_test=markers
+    y_test=y_true
     
     clf = GaussianNB()    #initialization of the classifier
     #clf=BernoulliNB()
@@ -501,7 +506,8 @@ def RandomF(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     X_train=markers
     y_train=y_true
-    
+    X_test=markers
+    y_test=y_true
     
     clf = RandomForestClassifier(n_estimators=200,max_features=None)    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
@@ -521,7 +527,8 @@ def NN(dframe,cat,save_roc):
     markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
     X_train=markers
     y_train=y_true
-    
+    X_test=markers
+    y_test=y_true
     
     clf = KNeighborsClassifier(algorithm='auto')    #initialization of the classifier
     CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
@@ -628,33 +635,34 @@ def get_upper(dframe,optr):
     return thres
         
 def make_hist(dframe,cat,thres):
-    dframe,_=remove_nan_dframe(dframe,cat)
-    column=dframe[cat]
-    labels=column.unique()
-    markers=dframe.iloc[:,6:13]
-    TMs=markers.columns
-    for i in range(0,len(TMs)):
-        markerY=[]
-        markerN=[]
-        TM=TMs[i]
-        marker=markers[TM]
-        label=TM.split(' ')
-        for k in column.index:
-            if column.loc[k]==labels[0]:
+    '''make a histogram for each of the tumor markers(with thresholds if available), where the concentrations are split based on the binary classification in the chosen category'''
+    dframe,_=remove_nan_dframe(dframe,cat) #remove all not a numbers
+    column=dframe[cat]  #column of interest
+    labels=column.unique()   #all uniwue values in the column
+    markers=dframe.iloc[:,6:13]   #columns containing the tumor markers
+    TMs=markers.columns   #names of the markers
+    for i in range(0,len(TMs)):   #look at each individual marker
+        markerY=[]   #marker concentration of label Yes
+        markerN=[]   #marker concentrations of label No
+        TM=TMs[i]  #current tumor marker looked at
+        marker=markers[TM]    #concentrations of current marker
+        label=TM.split(' ')    #split TM name
+        for k in column.index:   #look at all patients
+            if column.loc[k]==labels[0]:    #if patient belongs to first label add marker concentraion to Yes list
                 markerY.append(marker.loc[k])
-            elif column.loc[k]==labels[1]:
+            elif column.loc[k]==labels[1]:   #if patient belongs to second label add marker concentraion to No list
                 markerN.append(marker.loc[k])
-        plt.figure()
-        plt.hist([markerY,markerN],bins=200,color=['orange', 'green'])
-        plt.legend(labels)
-        stop1=np.mean(markerY)+3*abs(np.std(markerY))
-        stop2=np.mean(markerN)+3*abs(np.std(markerN))
-        if TM in thres.keys():
+        plt.figure()  #create figure
+        plt.hist([markerY,markerN],bins=200,color=['orange', 'green'])  #plot the different concentration classes in a histogram
+        plt.legend(labels)  #legend for the histogram
+        stop1=np.mean(markerY)+3*abs(np.std(markerY))   #will be used a a limit for the figure to ignore outliers
+        stop2=np.mean(markerN)+3*abs(np.std(markerN))    #will be used a a limit for the figure to ignore outliers
+        if TM in thres.keys(): #if we also have a threshold available for the current marker plot this value as a dashed line in the histogram
             plt.axvline(thres[TM], color='k', linestyle='dashed', linewidth=1)
-            stop=np.max([stop1,stop2,thres[TM]])
+            stop=np.max([stop1,stop2,thres[TM]])   #make sure the threshold is always visible in the histogram 
         else:
-            stop=np.max([stop1,stop2])
-        plt.xlim([0,stop])
+            stop=np.max([stop1,stop2])  #if no threshold look at the distributions to provide a limit
+        plt.xlim([0,stop])   #limit x range of histogram
         plt.title('Histogram of marker: '+label[0] +' for class: '+cat)
         plt.xlabel('Concentration '+label[1])
         plt.ylabel('Number of occurrences')
@@ -663,6 +671,7 @@ def make_hist(dframe,cat,thres):
     return
 
 def make_bar(PPV,NPV,sensi,speci,cat,classifiers):
+    ''''show each specified statistics in a separate bar plot for all the classifiers'''
     #sig=signature(make_bar)
     #pars=len(sig.parameters)-2
     
@@ -718,4 +727,10 @@ aucSVM,PPV_SVM,NPV_SVM,sensitivity_SVM,specificity_SVM, report_SVM, CV_score_SVM
 aucNB,PPV_NB,NPV_NB,sensitivity_NB,specificity_NB, report_NB, CV_score_NB=Naive(dframe,category_to_investigate,save_roc=False)
 aucRF,PPV_RF,NPV_RF,sensitivity_RF,specificity_RF, report_RF, CV_score_RF=RandomF(dframe,category_to_investigate,save_roc=False)
 aucNN,PPV_NN,NPV_NN,sensitivity_NN,specificity_NN, report_NN, CV_score_NN=NN(dframe,category_to_investigate,save_roc=False)
-make_bar([PPV_p,PPV_DT,PPV_LC,PPV_SVM,PPV_NB,PPV_RF,PPV_NN],[NPV_p,NPV_DT,NPV_LC,NPV_SVM,NPV_NB,NPV_RF,NPV_NN],[sensi_p,sensitivity_DT,sensitivity_LC,sensitivity_SVM,sensitivity_NB,sensitivity_RF,sensitivity_NN],[speci_p,specificity_DT,specificity_LC,specificity_SVM,specificity_NB,specificity_RF,specificity_NN],category_to_investigate,['Paper','Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors'])
+
+PPVs=[PPV_p,PPV_DT,PPV_LC,PPV_SVM,PPV_NB,PPV_RF,PPV_NN]
+NPVs=[NPV_p,NPV_DT,NPV_LC,NPV_SVM,NPV_NB,NPV_RF,NPV_NN]
+sensis=[sensi_p,sensitivity_DT,sensitivity_LC,sensitivity_SVM,sensitivity_NB,sensitivity_RF,sensitivity_NN]
+specis=[speci_p,specificity_DT,specificity_LC,specificity_SVM,specificity_NB,specificity_RF,specificity_NN]
+classifiers=['Paper','Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
+make_bar(PPVs,NPVs,sensis,specis,category_to_investigate,classifiers)
