@@ -675,7 +675,7 @@ def make_bar(cat,classifiers,**kwargs):
     
     if kwargs is not None:  #if any statistical arguments are give continue
         for param, value in kwargs.items():   #unpack the dictionary of keyword arguments
-            #now look if any of the set up statistical values is given as a keyword arguments, if so plot it 
+            #now plot each statistic given in the keyword arguments
             plt.figure()
             plt.bar(classifiers,value)
             plt.title('Histogram of the '+str(param)+' of different classifiers')
