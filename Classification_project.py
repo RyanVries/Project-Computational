@@ -670,44 +670,47 @@ def make_hist(dframe,cat,thres):
         
     return
 
-def make_bar(PPV,NPV,sensi,speci,cat,classifiers):
+def make_bar(cat,classifiers,**kwargs):
     ''''show each specified statistics in a separate bar plot for all the classifiers'''
-    #sig=signature(make_bar)
-    #pars=len(sig.parameters)-2
     
-    #for i in range(0,pars):
-    plt.figure()
-    plt.bar(classifiers,PPV)
-    plt.title('Histogram of the PPV of different classifiers')
-    plt.ylabel('PPV')
-    plt.xlabel('Classifier')
-    plt.xticks(rotation='vertical')
-    plt.show()
-    
-    plt.figure()
-    plt.bar(classifiers,NPV)
-    plt.title('Histogram of the NPV of different classifiers')
-    plt.ylabel('NPV')
-    plt.xlabel('Classifier')
-    plt.xticks(rotation='vertical')
-    plt.show()
-    
-    plt.figure()
-    plt.bar(classifiers,sensi)
-    plt.title('Histogram of the sensitivity of different classifiers')
-    plt.ylabel('Sensitivity')
-    plt.xlabel('Classifier')
-    plt.xticks(rotation='vertical')
-    plt.show()
-    
-    plt.figure()
-    plt.bar(classifiers,speci)
-    plt.title('Histogram of the specificity of different classifiers')
-    plt.ylabel('Specificity')
-    plt.xlabel('Classifier')
-    plt.xticks(rotation='vertical')
-    plt.show()
-    
+    if kwargs is not None:  #if any statistical arguments are give continue
+        for param, value in kwargs.items():   #unpack the dictionary of keyword arguments
+            #now look if any of the set up statistical values is given as a keyword arguments, if so plot it 
+            if str(param)=='PPV':   
+                plt.figure()
+                plt.bar(classifiers,value)
+                plt.title('Histogram of the PPV of different classifiers')
+                plt.ylabel('PPV')
+                plt.xlabel('Classifier')
+                plt.xticks(rotation='vertical')
+                plt.show()
+            
+            if str(param)=='NPV':  
+                plt.figure()
+                plt.bar(classifiers,value)
+                plt.title('Histogram of the NPV of different classifiers')
+                plt.ylabel('NPV')
+                plt.xlabel('Classifier')
+                plt.xticks(rotation='vertical')
+                plt.show()
+            
+            if str(param)=='sensi':
+                plt.figure()
+                plt.bar(classifiers,value)
+                plt.title('Histogram of the sensitivity of different classifiers')
+                plt.ylabel('Sensitivity')
+                plt.xlabel('Classifier')
+                plt.xticks(rotation='vertical')
+                plt.show()
+            
+            if str(param)=='speci':
+                plt.figure()
+                plt.bar(classifiers,value)
+                plt.title('Histogram of the specificity of different classifiers')
+                plt.ylabel('Specificity')
+                plt.xlabel('Classifier')
+                plt.xticks(rotation='vertical')
+                plt.show()
     
     return 
     
@@ -733,4 +736,4 @@ NPVs=[NPV_p,NPV_DT,NPV_LC,NPV_SVM,NPV_NB,NPV_RF,NPV_NN]
 sensis=[sensi_p,sensitivity_DT,sensitivity_LC,sensitivity_SVM,sensitivity_NB,sensitivity_RF,sensitivity_NN]
 specis=[speci_p,specificity_DT,specificity_LC,specificity_SVM,specificity_NB,specificity_RF,specificity_NN]
 classifiers=['Paper','Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
-make_bar(PPVs,NPVs,sensis,specis,category_to_investigate,classifiers)
+make_bar(category_to_investigate,classifiers,PPV=PPVs,NPV=NPVs,sensi=sensis,speci=specis)
