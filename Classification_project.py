@@ -169,7 +169,10 @@ def optimal_thres(dframe,category='lung_carcinoma'):
     TMs=dframe.columns[6:13]    #names of all tumor markers
     threshold=np.linspace(0,200,400)   #define possible thresholds
     AUCs=np.zeros((len(threshold),len(TMs)))   #make room in memory for the AUCs
-    labels=['No','Yes']
+    if category=='lung_carcinoma':
+        labels=['No', 'Yes']  #determine unique labels
+    elif category=='cancer_type':
+        labels=['SCLC','NSCLC']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
     optimal=dict()   #dictionary to store the best threshold values
@@ -196,7 +199,10 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     TMs=dframe.columns[6:13]   #names of tumor markers
     threshold=np.linspace(0,200,400)   #define threshold range
     
-    labels=['No','Yes']
+    if category=='lung_carcinoma':
+        labels=['No', 'Yes']  #determine unique labels
+    elif category=='cancer_type':
+        labels=['SCLC','NSCLC']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)
     y_true=y_true.tolist()
@@ -259,7 +265,10 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
     (rows,columns)=dframe.shape
     TMs=dframe.columns[6:13]    #names of all tumor markers
     threshold=np.linspace(0,150,400)   #define possible thresholds
-    labels=['No','Yes']
+    if category=='lung_carcinoma':
+        labels=['No', 'Yes']  #determine unique labels
+    elif category=='cancer_type':
+        labels=['SCLC','NSCLC']
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
     k=5   #number of times boorstrap is applied
@@ -328,7 +337,7 @@ def visualize_DT(dtree,feature_names,class_names):
 def prepare_data(dframe,cat,normalize,smote):
     '''prepare the data for the classifier by applying mapping and splitting the data and if specified oversampling and/or normalization'''
     dframe, kept=remove_nan_dframe(dframe,cat)  #remove all Nan since these do not contribute to the classifier
-    extra=True  #provide additional data to the classifiers of age and smoking history
+    extra=False  #provide additional data to the classifiers of age and smoking history
     if extra==True: #remove the Nan's for the ages and smoking history if data will have to be included
         dframe,_=remove_nan_int(dframe,'age')
         dframe,_=remove_nan_dframe(dframe,'smoking_history')
@@ -391,8 +400,8 @@ def det_CVscore(clf,markers,y_true):
     for train_index, test_index in sss.split(markers, y_true):
         clf.fit(markers.iloc[train_index],y_true.iloc[train_index])
         pred=clf.predict_proba(markers.iloc[test_index])
-        score.append(roc_auc_score(y_true.iloc[test_index],pred))
-        score_f1.append(f1_score(y_true.iloc[test_index],pred))
+        score.append(roc_auc_score(y_true.iloc[test_index],pred[:,1]))
+        score_f1.append(f1_score(y_true.iloc[test_index],np.rint(pred[:,1])))
     CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
     
     return CV_score
@@ -425,7 +434,7 @@ def decisionT(dframe,cat,save_roc):
     
     
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
-    CV_score=det_CVscore_sim(clf,markers,y_true)  #apply cross validation and get score
+    CV_score=det_CVscore(clf,markers,y_true)  #apply cross validation and get score
     clf.fit(X_train,y_train)  #fit classifier to training data
     visualize_DT(clf,X_train.columns,labels)
 
@@ -446,7 +455,7 @@ def Logistic_clas(dframe,cat,save_roc):
     y_test=y_true
     
     clf = LogisticRegression(penalty='l2',solver='liblinear')    #initialization of the classifier
-    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -467,7 +476,7 @@ def SVM_clas(dframe,cat,save_roc):
     y_test=y_true
     
     clf = SVC(probability=True)    #initialization of the classifier
-    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -489,7 +498,7 @@ def Naive(dframe,cat,save_roc):
     
     clf = GaussianNB()    #initialization of the classifier
     #clf=BernoulliNB()
-    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -510,7 +519,7 @@ def RandomF(dframe,cat,save_roc):
     y_test=y_true
     
     clf = RandomForestClassifier(n_estimators=200,max_features=None)    #initialization of the classifier
-    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -531,7 +540,7 @@ def NN(dframe,cat,save_roc):
     y_test=y_true
     
     clf = KNeighborsClassifier(algorithm='auto')    #initialization of the classifier
-    CV_score=det_CVscore_sim(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -678,14 +687,14 @@ def make_bar(cat,classifiers,**kwargs):
             #now plot each statistic given in the keyword arguments
             plt.figure()
             plt.bar(classifiers,value)
-            plt.title('Histogram of the '+str(param)+' of different classifiers')
+            plt.title('Histogram of the '+str(param)+' of different classifiers for class: '+cat)
             plt.ylabel(str(param))
             plt.xlabel('Classifier')
             plt.xticks(rotation='vertical')
             plt.show()
     return 
     
-category_to_investigate='lung_carcinoma'
+category_to_investigate='cancer_type'
 file_loc='data_new.csv'
 dframe=read_data(file_loc)    #read data
 dframe=remove_nan_markers(dframe)
@@ -701,10 +710,18 @@ aucSVM,PPV_SVM,NPV_SVM,sensitivity_SVM,specificity_SVM, report_SVM, CV_score_SVM
 aucNB,PPV_NB,NPV_NB,sensitivity_NB,specificity_NB, report_NB, CV_score_NB=Naive(dframe,category_to_investigate,save_roc=False)
 aucRF,PPV_RF,NPV_RF,sensitivity_RF,specificity_RF, report_RF, CV_score_RF=RandomF(dframe,category_to_investigate,save_roc=False)
 aucNN,PPV_NN,NPV_NN,sensitivity_NN,specificity_NN, report_NN, CV_score_NN=NN(dframe,category_to_investigate,save_roc=False)
+if category_to_investigate=='lung_carcinoma':
+    PPVs=[PPV_p,PPV_DT,PPV_LC,PPV_SVM,PPV_NB,PPV_RF,PPV_NN]
+    NPVs=[NPV_p,NPV_DT,NPV_LC,NPV_SVM,NPV_NB,NPV_RF,NPV_NN]
+    sensis=[sensi_p,sensitivity_DT,sensitivity_LC,sensitivity_SVM,sensitivity_NB,sensitivity_RF,sensitivity_NN]
+    specis=[speci_p,specificity_DT,specificity_LC,specificity_SVM,specificity_NB,specificity_RF,specificity_NN]
+    classifiers=['Paper','Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
+else:
+    PPVs=[PPV_DT,PPV_LC,PPV_SVM,PPV_NB,PPV_RF,PPV_NN]
+    NPVs=[NPV_DT,NPV_LC,NPV_SVM,NPV_NB,NPV_RF,NPV_NN]
+    sensis=[sensitivity_DT,sensitivity_LC,sensitivity_SVM,sensitivity_NB,sensitivity_RF,sensitivity_NN]
+    specis=[specificity_DT,specificity_LC,specificity_SVM,specificity_NB,specificity_RF,specificity_NN]
+    classifiers=['Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
 
-PPVs=[PPV_p,PPV_DT,PPV_LC,PPV_SVM,PPV_NB,PPV_RF,PPV_NN]
-NPVs=[NPV_p,NPV_DT,NPV_LC,NPV_SVM,NPV_NB,NPV_RF,NPV_NN]
-sensis=[sensi_p,sensitivity_DT,sensitivity_LC,sensitivity_SVM,sensitivity_NB,sensitivity_RF,sensitivity_NN]
-specis=[speci_p,specificity_DT,specificity_LC,specificity_SVM,specificity_NB,specificity_RF,specificity_NN]
-classifiers=['Paper','Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
+
 make_bar(category_to_investigate,classifiers,PPV=PPVs,NPV=NPVs,sensitivity=sensis,specificity=specis)
