@@ -44,10 +44,10 @@ def remove_nan_dframe(dframe,class_sort):
     dframe=dframe.drop(drop_index,axis=0)   #drop all Nan indexes
     return dframe, kept
 
-def remove_nan_markers(dframe):
+def remove_nan_markers(dframe,locs):
     '''remove the patients with unknown concentrations of the tumor markers'''
     drop_index=[]; #will contain all indexes wchich will have to be removed  
-    TMs=dframe.columns[6:13]  #names of columns with the tumor markers
+    TMs=dframe.columns[locs]  #names of columns with the tumor markers
     for marker in TMs:   #look at each column which contains a TM
         for pat in dframe.index:  #look at each patientin the dataframe
             if np.isnan(dframe.loc[pat,marker])==True and pat not in drop_index:   #if the patient has a Nan as concentraton add to list
@@ -81,7 +81,7 @@ def remove_nan_list(lis):
         del lis[index]          
     return lis, kept
     
-def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
+def make_clustermap(dframe,remove,save_fig,locs,class_sort='lung_carcinoma'):
     '''make a clustermap of the selected column in the dataframe together with the corresponding labels of each patient'''
     if remove==True:    #remove Nan's if specified
         dframe, kept=remove_nan_dframe(dframe,class_sort)
@@ -89,7 +89,7 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
     labels=cla.unique()    #determine the unique strings in the column
     lut = dict(zip(labels, 'rbgk')) #create dictionary of possible options and assign a color code to each
     row_colors = cla.map(lut)   #provides the corresponding color code for each of the patients and thus indicates the label
-    markers=dframe.iloc[:,6:13]  #Tumor markers
+    markers=dframe.iloc[:,locs]  #Tumor markers
     cmap = sns.diverging_palette(250, 10, n=9, as_cmap=True)   #select a color pallete for the clustermap
     g=sns.clustermap(markers, cmap=cmap, metric='euclidean', method='single', col_cluster=False, row_colors=row_colors, z_score=1)   #make clustermap with normalization of the columns
 
@@ -104,7 +104,7 @@ def make_clustermap(dframe,remove,save_fig,class_sort='lung_carcinoma'):
         g.savefig('clustermap'+extra+'.png')
     return
 
-def approach_paper(dframe,thresholds,category='lung_carcinoma'):
+def approach_paper(dframe,thresholds,locs,category='lung_carcinoma'):
     """use the specified thresholds from the paper to classify each patient (LC=1 and no LC=0)"""
     dframe, kept=remove_nan_dframe(dframe,category)
     (rows,columns)=dframe.shape
@@ -122,7 +122,7 @@ def approach_paper(dframe,thresholds,category='lung_carcinoma'):
     AUCm=np.zeros(7)
     
     LC_results=np.zeros(rows)   #results of the thresholding operation
-    for i in range(6,13):   #look at all tumor markers
+    for i in locs:   #look at all tumor markers
         TM=dframe.columns[i]  #current marker
         LC_marker=np.zeros(rows)   #classification for each individual marker
         if TM in thresholds.keys():     #see if a threshold is present for the tumor marker
@@ -136,7 +136,7 @@ def approach_paper(dframe,thresholds,category='lung_carcinoma'):
             sensm[i-6]=S[1]
             specm[i-6]=E[1]
             AUCm[i-6]=roc_auc_score(gr,LC_marker)
-    print_stats_adv(PPVm,NPVm,sensm,specm,AUCm,dframe.columns[6:13],'Individual thresholds',category_to_investigate)   #provide the statistics in a table for each individual marker
+    print_stats_adv(PPVm,NPVm,sensm,specm,AUCm,dframe.columns[locs],'Individual thresholds',category_to_investigate)   #provide the statistics in a table for each individual marker
     predictions=LC_results
     
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(gr,predictions,labels)  #evaluate the operation by calculaton the programmed statistical values
@@ -162,11 +162,11 @@ def plot_optimal(AUCs,thresholds,TMs,optimal):
         
     return 
 
-def optimal_thres(dframe,category='lung_carcinoma'):
+def optimal_thres(dframe,locs,category='lung_carcinoma'):
     '''determine the optimal thresholds for each marker by optimalization of the AUC'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
-    TMs=dframe.columns[6:13]    #names of all tumor markers
+    TMs=dframe.columns[locs]    #names of all tumor markers
     threshold=np.linspace(0,200,400)   #define possible thresholds
     AUCs=np.zeros((len(threshold),len(TMs)))   #make room in memory for the AUCs
     if category=='lung_carcinoma':
@@ -176,7 +176,7 @@ def optimal_thres(dframe,category='lung_carcinoma'):
     lut = dict(zip(labels, [0,1]))
     y_true=dframe[category].map(lut)    #map the true classification to binary values
     optimal=dict()   #dictionary to store the best threshold values
-    for mi,marker in enumerate(range(6,13)):  #look at each marker separately
+    for mi,marker in enumerate(locs):  #look at each marker separately
         for index,thres in enumerate(threshold):   #loop over all of the possible threshold values
             LC_result=np.zeros(rows)  #make room in memory for classification
             for pat in range(0,rows):   #look at each patient
@@ -192,11 +192,11 @@ def optimal_thres(dframe,category='lung_carcinoma'):
     
     return optimal
 
-def optimal_thresCV(dframe,category='lung_carcinoma'):
+def optimal_thresCV(dframe,locs,category='lung_carcinoma'):
     '''determine the optimal threshold for each marker by applying cross validation and optimalization of the AUC'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
-    TMs=dframe.columns[6:13]   #names of tumor markers
+    TMs=dframe.columns[locs]   #names of tumor markers
     threshold=np.linspace(0,200,400)   #define threshold range
     
     if category=='lung_carcinoma':
@@ -211,7 +211,7 @@ def optimal_thresCV(dframe,category='lung_carcinoma'):
     skf = StratifiedKFold(n_splits=10)   #initialization of the cross validation
     
     overall_optimals=dict()  #dictionary which will contain the best threshold for each marker
-    for mi,marker in enumerate(range(6,13)):   #look at each marker
+    for mi,marker in enumerate(locs):   #look at each marker
         AUCs_CV=[]   #will contain the AUCs of a marker
         optimals=[]   #optimal thresholds for each CV set
         for train_index, test_index in skf.split(dframe, y_true):  #apply cross validation
@@ -259,11 +259,11 @@ def find_nearest(array, value, pos):
     bot_idx=pos-bot.argmax()-1   #position where metric value is equal to max metric minus its std 
     return bot_idx,top_idx
 
-def optimal_thresBoot(dframe,category='lung_carcinoma',used_metric='AUC'):
+def optimal_thresBoot(dframe,locs,category='lung_carcinoma',used_metric='AUC'):
     '''determine the optimal threshold for each marker by applying Bootstrap and optimalization of the chosen metric'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
-    TMs=dframe.columns[6:13]    #names of all tumor markers
+    TMs=dframe.columns[locs]    #names of all tumor markers
     threshold=np.linspace(0,150,400)   #define possible thresholds
     if category=='lung_carcinoma':
         labels=['No', 'Yes']  #determine unique labels
@@ -276,7 +276,7 @@ def optimal_thresBoot(dframe,category='lung_carcinoma',used_metric='AUC'):
     optimal_range=dict()   #the optimal range for each threshold
     optimal_means=dict()   #the threshold value with highest mean
     
-    for mi,marker in enumerate(range(6,13)):  #look at each marker separately
+    for mi,marker in enumerate(locs):  #look at each marker separately
         metric=np.zeros((len(threshold),k))   #make room in memory for the AUCs
         for i in range(0,k):   #applying Bootstrap multiple times
             ti = [randint(0, len(dframe[TMs[mi]])-1) for p in range(0, len(dframe[TMs[mi]]))]   #select random indices
@@ -347,8 +347,9 @@ def prepare_data(dframe,cat,normalize,smote):
     elif cat=='cancer_type':
         labels=['SCLC','NSCLC']
     #length=range(0,len(labels))  #provide a integer to each label
+    locs=marker_locations(dframe)
     lut = dict(zip(labels, [0,1])) #create dictionary of possible options
-    markers=dframe.iloc[:,6:13] #TM
+    markers=dframe.iloc[:,locs] #TM
     TMs=markers.columns
     y_true=y_true.map(lut)   #convert each string to the corresponding integer in the dictionary
           
@@ -647,9 +648,9 @@ def print_stats_adv(PPV,NPV,sensi,speci,AUC,labels,classifier,category):
     print(t)  #print Table
     return
 
-def get_upper(dframe,optr):
+def get_upper(dframe,optr,locs):
     '''get the upper value of the threshold range'''
-    TMs=dframe.columns[6:13]    #tumor markers
+    TMs=dframe.columns[locs]    #tumor markers
     thres=dict()    #dictionary for the upper values
     for i in range(0,7):   #look at each marker
         TM=TMs[i]    #current marker name
@@ -658,12 +659,12 @@ def get_upper(dframe,optr):
         thres[TM]=upper    #store upper value in new dictionary
     return thres
         
-def make_hist(dframe,cat,**kwargs):
+def make_hist(dframe,cat,locs,**kwargs):
     '''make a histogram for each of the tumor markers(with thresholds if available), where the concentrations are split based on the binary classification in the chosen category'''
     dframe,_=remove_nan_dframe(dframe,cat) #remove all not a numbers
     column=dframe[cat]  #column of interest
     labels=column.unique()   #all uniwue values in the column
-    markers=dframe.iloc[:,6:13]   #columns containing the tumor markers
+    markers=dframe.iloc[:,locs]   #columns containing the tumor markers
     TMs=markers.columns   #names of the markers
     for i in range(0,len(TMs)):   #look at each individual marker
         markerY=[]   #marker concentration of label Yes
@@ -756,17 +757,27 @@ def make_barCV(cat,classifiers,CV_scores):
         plt.xticks(rotation='vertical')
         plt.show()
     return
+
+def marker_locations(dframe):
+    markers=['TM_CA15.3 (U/mL)','TM_CEA (ng/mL)','TM_CYFRA (ng/mL)','TM_HE4 (pmol/L)','TM_NSE (ng/mL)','TM_PROGRP (pg/mL)','TM_SCC (ng/mL)']
+    locations=[]
+    for index,column in enumerate(dframe.columns):
+        if column in markers:
+            locations.append(index)
+    return locations
     
 category_to_investigate='lung_carcinoma'
 file_loc='data_new.csv'
 dframe=read_data(file_loc)    #read data
-dframe=remove_nan_markers(dframe)
+locs=marker_locations(dframe)
+dframe=remove_nan_markers(dframe,locs)
 
-make_clustermap(dframe=dframe, remove=True, save_fig=False, class_sort=category_to_investigate)
+
+make_clustermap(dframe=dframe, remove=True, save_fig=False, locs=locs, class_sort=category_to_investigate)
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
 if category_to_investigate=='lung_carcinoma':
-    PPV_p,NPV_p,sensi_p,speci_p,report_p=approach_paper(dframe,thresholds,category_to_investigate)        
+    PPV_p,NPV_p,sensi_p,speci_p,report_p=approach_paper(dframe,thresholds,locs,category_to_investigate)        
 aucDT,PPV_DT,NPV_DT,sensitivity_DT,specificity_DT, report_DT, CV_score_DT=decisionT(dframe,category_to_investigate,save_roc=False)
 aucLC,PPV_LC,NPV_LC,sensitivity_LC,specificity_LC, report_LC, CV_score_LC=Logistic_clas(dframe,category_to_investigate,save_roc=False)
 aucSVM,PPV_SVM,NPV_SVM,sensitivity_SVM,specificity_SVM, report_SVM, CV_score_SVM=SVM_clas(dframe,category_to_investigate,save_roc=False)
@@ -789,12 +800,12 @@ else:
 
 make_bar(category_to_investigate,classifiers,PPV=PPVs,NPV=NPVs,sensitivity=sensis,specificity=specis)
 
-all_cmd=False
+all_cmd=True
 if all_cmd==True:
-    optr,optm=optimal_thresBoot(dframe,category_to_investigate)
-    opt_FD=optimal_thres(dframe,category_to_investigate)
-    opt_upper=get_upper(dframe,optr)
-    make_hist(dframe,category_to_investigate,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
+    optr,optm=optimal_thresBoot(dframe,locs,category_to_investigate)
+    opt_FD=optimal_thres(dframe,locs,category_to_investigate)
+    opt_upper=get_upper(dframe,optr,locs)
+    make_hist(dframe,category_to_investigate,locs,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
 
 classifiers=['Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
 make_barCV('lung_carcinoma',classifiers,CV_scores=[CV_score_DT, CV_score_LC, CV_score_SVM, CV_score_NB, CV_score_RF, CV_score_NN])
