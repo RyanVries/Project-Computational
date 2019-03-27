@@ -684,17 +684,17 @@ def make_hist(dframe,cat,**kwargs):
         stop2=np.mean(markerN)+3*abs(np.std(markerN))    #will be used a a limit for the figure to ignore outliers
         stop=np.max([stop1,stop2])  #if no threshold look at the distributions to provide a limit
         if kwargs is not None:  #if any statistical arguments are give continue
-            number_of_plots=len(kwargs.keys())
-            colors = sns.color_palette("hls", number_of_plots)
+            number_of_plots=len(kwargs.keys())  #number of different threshold dictionaries
+            colors = sns.color_palette("hls", number_of_plots)  #make a color for each dictionary
             
-            for index, (name, thres) in enumerate(kwargs.items()):
-                if TM in thres.keys(): #if we also have a threshold available for the current marker plot this value as a dashed line in the histogram
-                    ax.axvline(float(thres[TM]), color=colors[index], linestyle='dashed', linewidth=1, zorder=3)
-                    legends.append(name)
+            for index, (name, thres) in enumerate(kwargs.items()): #look at each threshold package
+                if TM in thres.keys(): #if we  have a threshold available for the current marker plot this value as a dashed line in the histogram
+                    ax.axvline(float(thres[TM]), color=colors[index], linestyle='dashed', linewidth=1, zorder=3)  #plot vertical dashed line
+                    legends.append(name)   #append name of the threshold dictionary to the legend list
                     stop_tem=np.max([stop1,stop2,float(thres[TM])])   #make sure the threshold is always visible in the histogram 
-                    if stop_tem>stop:
+                    if stop_tem>stop:   #make sure everything will eventually fit in the plot
                         stop=stop_tem    
-        legends.append(labels[0])
+        legends.append(labels[0])  
         legends.append(labels[1])
         plt.legend(legends)  #legend for the histogram
         plt.xlim([0,stop])   #limit x range of histogram
@@ -721,38 +721,37 @@ def make_bar(cat,classifiers,**kwargs):
     return 
 
 def make_barCV(cat,classifiers,CV_scores):
-    ''''show each specified statistics in a separate bar plot for all the classifiers'''
+    ''''show each specified statistics in a separate bar plot for all the classifiers with cross validation'''
     
-   
-    means=[]
-    stds=[]
+    means=[]  #will contain the means of all statistics
+    stds=[] #will contain all the standard deviations of all statistics
     statistics=['AUC','PPV','NPV','sensitivity','specificity']
-    for dic in CV_scores:
-        for key in dic.keys():
-            if 'mean' in key:
-                if np.isnan(dic[key])==True:
+    for dic in CV_scores:  #look at all the dictionaries for each classifier
+        for key in dic.keys():  #look everything that is given
+            if 'mean' in key:  #specificy that this is a mean
+                if np.isnan(dic[key])==True:  #make sure no nan values are included 
                     means.append(0)
                 else:
-                    means.append(dic[key]) 
-            elif 'std' in key:
-                if np.isnan(dic[key])==True:
+                    means.append(dic[key]) #append the mean to the list
+            elif 'std' in key:   #specifiy that this is a standard deviation
+                if np.isnan(dic[key])==True:  #make sure no nan values are included 
                     stds.append(0)
                 else:
-                    stds.append(dic[key])
+                    stds.append(dic[key]) #append the std to the list
                     
-    for idx,stat in enumerate(statistics):
-        pos=range(idx,len(means),len(statistics))
-  
-        
-        means_plot=[]
-        std_plot=[]
-        for i in pos:
+    for idx,stat in enumerate(statistics):  #go over each statistic in the list
+        pos=range(idx,len(means),len(statistics))  #the indexes of this statistic in the means and std list
+        means_plot=[]  #means to plot
+        std_plot=[] #std's to plot
+        for i in pos:  #add all the corresponding means and std's for the stat to the list
             means_plot.append(means[i]) 
             std_plot.append(stds[i])
+        #plot the bar plot
         plt.figure()
-        plt.bar(classifiers,means_plot,yerr=std_plot)
+        plt.bar(classifiers,means_plot,yerr=std_plot,capsize=10)
         plt.title('Bar plot of the '+str(stat)+' of different classifiers with cross validation for class: '+cat)
         plt.ylabel(str(stat))
+        plt.ylim([0,1.1])
         plt.xlabel('Classifier')
         plt.xticks(rotation='vertical')
         plt.show()
