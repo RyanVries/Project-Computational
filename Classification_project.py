@@ -405,10 +405,18 @@ def det_CVscore(clf,markers,y_true,labels):
         pred=clf.predict_proba(markers.iloc[test_index])
         score.append(roc_auc_score(y_true.iloc[test_index],pred[:,1]))
         P,N,se,sp,_=evaluate_stats(y_true.iloc[test_index],np.rint(pred[:,1]),labels)
-        PPV.append(P)
-        NPV.append(N)
-        sensi.append(se)
-        speci.append(sp)
+        if np.isnan(P[1])==True:
+            P[1]=0
+        if np.isnan(N[1])==True:
+            N[1]=0
+        if np.isnan(se[1])==True:
+            se[1]=0
+        if np.isnan(sp[1])==True:
+            sp[1]=0
+        PPV.append(P[1])
+        NPV.append(N[1])
+        sensi.append(se[1])
+        speci.append(sp[1])
     CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean PPV':np.mean(PPV),'std PPV':np.std(PPV),'mean NPV':np.mean(NPV),'std NPV':np.std(NPV),'mean sensitivity':np.mean(sensi),'std sensitivity':np.std(sensi),'mean specificity':np.mean(speci),'std specificity':np.std(speci)}
     
     return CV_score
@@ -712,20 +720,42 @@ def make_bar(cat,classifiers,**kwargs):
             plt.show()
     return 
 
-def make_barCV(cat,classifiers,**kwargs):
+def make_barCV(cat,classifiers,CV_scores):
     ''''show each specified statistics in a separate bar plot for all the classifiers'''
     
-    if kwargs is not None:  #if any statistical arguments are give continue
-        for param, value in kwargs.items():   #unpack the dictionary of keyword arguments
-            #now plot each statistic given in the keyword arguments
-            name=value
-            plt.figure()
-            plt.bar(classifiers,value)
-            plt.title('Bar plot of the '+str(name)+' of different classifiers with cross validation for class: '+cat)
-            plt.ylabel(str(name))
-            plt.xlabel('Classifier')
-            plt.xticks(rotation='vertical')
-            plt.show()
+   
+    means=[]
+    stds=[]
+    statistics=['AUC','PPV','NPV','sensitivity','specificity']
+    for dic in CV_scores:
+        for key in dic.keys():
+            if 'mean' in key:
+                if np.isnan(dic[key])==True:
+                    means.append(0)
+                else:
+                    means.append(dic[key]) 
+            elif 'std' in key:
+                if np.isnan(dic[key])==True:
+                    stds.append(0)
+                else:
+                    stds.append(dic[key])
+                    
+    for idx,stat in enumerate(statistics):
+        pos=range(idx,len(means),len(statistics))
+  
+        
+        means_plot=[]
+        std_plot=[]
+        for i in pos:
+            means_plot.append(means[i]) 
+            std_plot.append(stds[i])
+        plt.figure()
+        plt.bar(classifiers,means_plot,yerr=std_plot)
+        plt.title('Bar plot of the '+str(stat)+' of different classifiers with cross validation for class: '+cat)
+        plt.ylabel(str(stat))
+        plt.xlabel('Classifier')
+        plt.xticks(rotation='vertical')
+        plt.show()
     return
     
 category_to_investigate='lung_carcinoma'
@@ -767,3 +797,5 @@ if all_cmd==True:
     opt_upper=get_upper(dframe,optr)
     make_hist(dframe,category_to_investigate,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
 
+classifiers=['Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
+make_barCV('lung_carcinoma',classifiers,CV_scores=[CV_score_DT, CV_score_LC, CV_score_SVM, CV_score_NB, CV_score_RF, CV_score_NN])
