@@ -255,8 +255,14 @@ def find_nearest(array, value, pos):
     bot=bot<0
     top=top<0
     np.flip(bot)
-    top_idx=top.argmax()-1+pos  #position where metric value is equal to max metric minus its std 
-    bot_idx=pos-bot.argmax()-1   #position where metric value is equal to max metric minus its std 
+    if len(top)>0:
+        top_idx=top.argmax()-1+pos  #position where metric value is equal to max metric minus its std 
+    else:
+        top_idx=len(array)
+    if len(bot)>0:
+        bot_idx=pos-bot.argmax()-1   #position where metric value is equal to max metric minus its std 
+    else:
+        bot_idx=0
     return bot_idx,top_idx
 
 def optimal_thresBoot(dframe,locs,category='lung_carcinoma',used_metric='AUC'):
@@ -766,7 +772,7 @@ def marker_locations(dframe):
             locations.append(index)
     return locations
     
-category_to_investigate='lung_carcinoma'
+category_to_investigate='cancer_type'
 file_loc='data_new.csv'
 dframe=read_data(file_loc)    #read data
 locs=marker_locations(dframe)
@@ -800,12 +806,16 @@ else:
 
 make_bar(category_to_investigate,classifiers,PPV=PPVs,NPV=NPVs,sensitivity=sensis,specificity=specis)
 
-all_cmd=True
+all_cmd=False
 if all_cmd==True:
     optr,optm=optimal_thresBoot(dframe,locs,category_to_investigate)
     opt_FD=optimal_thres(dframe,locs,category_to_investigate)
     opt_upper=get_upper(dframe,optr,locs)
-    make_hist(dframe,category_to_investigate,locs,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
+    if category_to_investigate=='lung_carcinoma':
+        make_hist(dframe,category_to_investigate,locs,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
+    elif category_to_investigate=='cancer_type':
+        make_hist(dframe,category_to_investigate,locs,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
+
 
 classifiers=['Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
 make_barCV('lung_carcinoma',classifiers,CV_scores=[CV_score_DT, CV_score_LC, CV_score_SVM, CV_score_NB, CV_score_RF, CV_score_NN])
