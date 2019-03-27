@@ -259,7 +259,7 @@ def find_nearest(array, value, pos):
     bot_idx=pos-bot.argmax()-1   #position where metric value is equal to max metric minus its std 
     return bot_idx,top_idx
 
-def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
+def optimal_thresBoot(dframe,category='lung_carcinoma',used_metric='AUC'):
     '''determine the optimal threshold for each marker by applying Bootstrap and optimalization of the chosen metric'''
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
@@ -316,10 +316,10 @@ def optimal_thresBootstrap(dframe,category='lung_carcinoma',used_metric='AUC'):
             optimal_range[TMs[mi]]=string  #add range to dict
             optimal_means[TMs[mi]]=threshold[spot]   #add best threshold considering mean metric to dict
         
-        elif used_metric=='F1' or used_metric=='specificity':
+        elif used_metric=='F1' :
             spot=np.argmax(means)  #place with highest mean metric score
             optimal_means[TMs[mi]]=threshold[spot] #add best threshold considering mean metric to dict
-        elif used_metric=='precision':
+        elif used_metric=='precision' or used_metric=='specificity':
             means=np.where(means>0.98,0,means) #every metric value which is to high to be considered as real/realistic is set to 0 
             spot=np.argmax(means) #place with highest mean metric score
             optimal_means[TMs[mi]]=threshold[spot] #add best threshold considering mean metric to dict
@@ -337,7 +337,7 @@ def visualize_DT(dtree,feature_names,class_names):
 def prepare_data(dframe,cat,normalize,smote):
     '''prepare the data for the classifier by applying mapping and splitting the data and if specified oversampling and/or normalization'''
     dframe, kept=remove_nan_dframe(dframe,cat)  #remove all Nan since these do not contribute to the classifier
-    extra=False  #provide additional data to the classifiers of age and smoking history
+    extra=True  #provide additional data to the classifiers of age and smoking history
     if extra==True: #remove the Nan's for the ages and smoking history if data will have to be included
         dframe,_=remove_nan_int(dframe,'age')
         dframe,_=remove_nan_dframe(dframe,'smoking_history')
@@ -363,7 +363,7 @@ def prepare_data(dframe,cat,normalize,smote):
         markers['smoking_history'] = smoking  #add the smoking history to the dataframe with the tumor markers
         TMs=markers.columns   #column names also include ages and smoking
     
-    X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2)   #split the data in a training set and a test set
+    X_train, X_test, y_train, y_test = train_test_split(markers.values, y_true, test_size=0.2, stratify=y_true)   #split the data in a training set and a test set
     
     col=markers.columns
     X_train=pd.DataFrame(X_train,columns=col)
@@ -391,18 +391,25 @@ def prepare_data(dframe,cat,normalize,smote):
         
     return markers, y_true, X_train, X_test, y_train, y_test, labels, lut
 
-def det_CVscore(clf,markers,y_true):
+def det_CVscore(clf,markers,y_true,labels):
     '''apply cross validation (Startified Shuffle Split) and determine the mean and standard deviation of the scores'''
     n=100
     sss = StratifiedShuffleSplit(n_splits=n, test_size=0.2)
     score=[]
-    score_f1=[]
+    PPV=[]
+    NPV=[]
+    sensi=[]
+    speci=[]
     for train_index, test_index in sss.split(markers, y_true):
         clf.fit(markers.iloc[train_index],y_true.iloc[train_index])
         pred=clf.predict_proba(markers.iloc[test_index])
         score.append(roc_auc_score(y_true.iloc[test_index],pred[:,1]))
-        score_f1.append(f1_score(y_true.iloc[test_index],np.rint(pred[:,1])))
-    CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean F1':np.mean(score_f1),'std F1':np.std(score_f1)}
+        P,N,se,sp,_=evaluate_stats(y_true.iloc[test_index],np.rint(pred[:,1]),labels)
+        PPV.append(P)
+        NPV.append(N)
+        sensi.append(se)
+        speci.append(sp)
+    CV_score={'mean AUC':np.mean(score),'std AUC':np.std(score),'mean PPV':np.mean(PPV),'std PPV':np.std(PPV),'mean NPV':np.mean(NPV),'std NPV':np.std(NPV),'mean sensitivity':np.mean(sensi),'std sensitivity':np.std(sensi),'mean specificity':np.mean(speci),'std specificity':np.std(speci)}
     
     return CV_score
 
@@ -434,7 +441,7 @@ def decisionT(dframe,cat,save_roc):
     
     
     clf = tree.DecisionTreeClassifier() #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #apply cross validation and get score
+    CV_score=det_CVscore(clf,markers,y_true,labels)  #cross validation
     clf.fit(X_train,y_train)  #fit classifier to training data
     visualize_DT(clf,X_train.columns,labels)
 
@@ -455,7 +462,7 @@ def Logistic_clas(dframe,cat,save_roc):
     y_test=y_true
     
     clf = LogisticRegression(penalty='l2',solver='liblinear')    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true,labels)  #cross validation
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -476,7 +483,7 @@ def SVM_clas(dframe,cat,save_roc):
     y_test=y_true
     
     clf = SVC(probability=True)    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true,labels)
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -498,7 +505,7 @@ def Naive(dframe,cat,save_roc):
     
     clf = GaussianNB()    #initialization of the classifier
     #clf=BernoulliNB()
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true,labels)
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -519,7 +526,7 @@ def RandomF(dframe,cat,save_roc):
     y_test=y_true
     
     clf = RandomForestClassifier(n_estimators=200,max_features=None)    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true,labels)
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -540,7 +547,7 @@ def NN(dframe,cat,save_roc):
     y_test=y_true
     
     clf = KNeighborsClassifier(algorithm='auto')    #initialization of the classifier
-    CV_score=det_CVscore(clf,markers,y_true)  #cross validation
+    CV_score=det_CVscore(clf,markers,y_true,labels)
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
@@ -643,7 +650,7 @@ def get_upper(dframe,optr):
         thres[TM]=upper    #store upper value in new dictionary
     return thres
         
-def make_hist(dframe,cat,thres):
+def make_hist(dframe,cat,**kwargs):
     '''make a histogram for each of the tumor markers(with thresholds if available), where the concentrations are split based on the binary classification in the chosen category'''
     dframe,_=remove_nan_dframe(dframe,cat) #remove all not a numbers
     column=dframe[cat]  #column of interest
@@ -661,16 +668,27 @@ def make_hist(dframe,cat,thres):
                 markerY.append(marker.loc[k])
             elif column.loc[k]==labels[1]:   #if patient belongs to second label add marker concentraion to No list
                 markerN.append(marker.loc[k])
-        plt.figure()  #create figure
-        plt.hist([markerY,markerN],bins=200,color=['orange', 'green'])  #plot the different concentration classes in a histogram
-        plt.legend(labels)  #legend for the histogram
+        fig1=plt.figure()
+        ax = fig1.add_subplot(111)
+        ax.hist([markerY,markerN],bins=200,color=['orange', 'green'],zorder=1)  #plot the different concentration classes in a histogram
+        legends=[]
         stop1=np.mean(markerY)+3*abs(np.std(markerY))   #will be used a a limit for the figure to ignore outliers
         stop2=np.mean(markerN)+3*abs(np.std(markerN))    #will be used a a limit for the figure to ignore outliers
-        if TM in thres.keys(): #if we also have a threshold available for the current marker plot this value as a dashed line in the histogram
-            plt.axvline(thres[TM], color='k', linestyle='dashed', linewidth=1)
-            stop=np.max([stop1,stop2,thres[TM]])   #make sure the threshold is always visible in the histogram 
-        else:
-            stop=np.max([stop1,stop2])  #if no threshold look at the distributions to provide a limit
+        stop=np.max([stop1,stop2])  #if no threshold look at the distributions to provide a limit
+        if kwargs is not None:  #if any statistical arguments are give continue
+            number_of_plots=len(kwargs.keys())
+            colors = sns.color_palette("hls", number_of_plots)
+            
+            for index, (name, thres) in enumerate(kwargs.items()):
+                if TM in thres.keys(): #if we also have a threshold available for the current marker plot this value as a dashed line in the histogram
+                    ax.axvline(float(thres[TM]), color=colors[index], linestyle='dashed', linewidth=1, zorder=3)
+                    legends.append(name)
+                    stop_tem=np.max([stop1,stop2,float(thres[TM])])   #make sure the threshold is always visible in the histogram 
+                    if stop_tem>stop:
+                        stop=stop_tem    
+        legends.append(labels[0])
+        legends.append(labels[1])
+        plt.legend(legends)  #legend for the histogram
         plt.xlim([0,stop])   #limit x range of histogram
         plt.title('Histogram of marker: '+label[0] +' for class: '+cat)
         plt.xlabel('Concentration '+label[1])
@@ -687,14 +705,30 @@ def make_bar(cat,classifiers,**kwargs):
             #now plot each statistic given in the keyword arguments
             plt.figure()
             plt.bar(classifiers,value)
-            plt.title('Histogram of the '+str(param)+' of different classifiers for class: '+cat)
+            plt.title('Bar plot of the '+str(param)+' of different classifiers for class: '+cat)
             plt.ylabel(str(param))
             plt.xlabel('Classifier')
             plt.xticks(rotation='vertical')
             plt.show()
     return 
+
+def make_barCV(cat,classifiers,**kwargs):
+    ''''show each specified statistics in a separate bar plot for all the classifiers'''
     
-category_to_investigate='cancer_type'
+    if kwargs is not None:  #if any statistical arguments are give continue
+        for param, value in kwargs.items():   #unpack the dictionary of keyword arguments
+            #now plot each statistic given in the keyword arguments
+            name=value
+            plt.figure()
+            plt.bar(classifiers,value)
+            plt.title('Bar plot of the '+str(name)+' of different classifiers with cross validation for class: '+cat)
+            plt.ylabel(str(name))
+            plt.xlabel('Classifier')
+            plt.xticks(rotation='vertical')
+            plt.show()
+    return
+    
+category_to_investigate='lung_carcinoma'
 file_loc='data_new.csv'
 dframe=read_data(file_loc)    #read data
 dframe=remove_nan_markers(dframe)
@@ -725,3 +759,11 @@ else:
 
 
 make_bar(category_to_investigate,classifiers,PPV=PPVs,NPV=NPVs,sensitivity=sensis,specificity=specis)
+
+all_cmd=False
+if all_cmd==True:
+    optr,optm=optimal_thresBoot(dframe,category_to_investigate)
+    opt_FD=optimal_thres(dframe,category_to_investigate)
+    opt_upper=get_upper(dframe,optr)
+    make_hist(dframe,category_to_investigate,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
+
