@@ -818,4 +818,5 @@ if all_cmd==True:
 
 
 classifiers=['Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
-make_barCV('lung_carcinoma',classifiers,CV_scores=[CV_score_DT, CV_score_LC, CV_score_SVM, CV_score_NB, CV_score_RF, CV_score_NN])
+CV_scores=[CV_score_DT, CV_score_LC, CV_score_SVM, CV_score_NB, CV_score_RF, CV_score_NN]
+make_barCV('lung_carcinoma',classifiers,CV_scores)
