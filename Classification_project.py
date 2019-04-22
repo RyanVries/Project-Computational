@@ -109,7 +109,10 @@ def approach_paper(dframe,thresholds,locs,category='lung_carcinoma'):
     dframe, kept=remove_nan_dframe(dframe,category)
     (rows,columns)=dframe.shape
     truth=dframe[category]  
-    labels=['No','Yes']
+    if category=='lung_carcinoma':
+        labels=['No', 'Yes']  #determine unique labels
+    elif category=='cancer_type':
+        labels=['SCLC','NSCLC']
     lut = dict(zip(labels, [0,1]))
     
     ground = truth.map(lut)   #the ground truth of each patient mapped with the labels dictionary to have a binary problem
@@ -167,7 +170,7 @@ def optimal_thres(dframe,locs,category='lung_carcinoma'):
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
     TMs=dframe.columns[locs]    #names of all tumor markers
-    threshold=np.linspace(0,200,400)   #define possible thresholds
+    threshold=np.linspace(0,1000,800)   #define possible thresholds
     AUCs=np.zeros((len(threshold),len(TMs)))   #make room in memory for the AUCs
     if category=='lung_carcinoma':
         labels=['No', 'Yes']  #determine unique labels
@@ -197,7 +200,7 @@ def optimal_thresCV(dframe,locs,category='lung_carcinoma'):
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
     TMs=dframe.columns[locs]   #names of tumor markers
-    threshold=np.linspace(0,200,400)   #define threshold range
+    threshold=np.linspace(0,1000,800)   #define threshold range
     
     if category=='lung_carcinoma':
         labels=['No', 'Yes']  #determine unique labels
@@ -270,7 +273,7 @@ def optimal_thresBoot(dframe,locs,category='lung_carcinoma',used_metric='AUC'):
     dframe, kept=remove_nan_dframe(dframe,category)  #remove Nans
     (rows,columns)=dframe.shape
     TMs=dframe.columns[locs]    #names of all tumor markers
-    threshold=np.linspace(0,150,400)   #define possible thresholds
+    threshold=np.linspace(0,1000,800)   #define possible thresholds
     if category=='lung_carcinoma':
         labels=['No', 'Yes']  #determine unique labels
     elif category=='cancer_type':
@@ -324,17 +327,29 @@ def optimal_thresBoot(dframe,locs,category='lung_carcinoma',used_metric='AUC'):
         
         elif used_metric=='F1' :
             spot=np.argmax(means)  #place with highest mean metric score
+            #
+            t_range=means[spot]-np.abs(stand[spot])  #highest mean minus its standard deviation
+            bot,top=find_nearest(means,t_range,spot)  #threshold indexes which match the calculated value
+            string='-'.join([str(threshold[bot]),str(threshold[top])])  #range written in a string
+            optimal_range[TMs[mi]]=string  #add range to dict
+            #
             optimal_means[TMs[mi]]=threshold[spot] #add best threshold considering mean metric to dict
         elif used_metric=='precision' or used_metric=='specificity':
             means=np.where(means>0.98,0,means) #every metric value which is to high to be considered as real/realistic is set to 0 
             spot=np.argmax(means) #place with highest mean metric score
+            #
+            t_range=means[spot]-np.abs(stand[spot])  #highest mean minus its standard deviation
+            bot,top=find_nearest(means,t_range,spot)  #threshold indexes which match the calculated value
+            string='-'.join([str(threshold[bot]),str(threshold[top])])  #range written in a string
+            optimal_range[TMs[mi]]=string  #add range to dict
+            #
             optimal_means[TMs[mi]]=threshold[spot] #add best threshold considering mean metric to dict
             
     return optimal_range,optimal_means
     
 def visualize_DT(dtree,feature_names,class_names):
     '''Visualization of the decision tree'''
-    export_graphviz(dtree, out_file='tree.dot', feature_names = feature_names,class_names = class_names,rounded = True, proportion = False, precision = 2, filled = True)
+    export_graphviz(dtree, out_file='tree3.dot', feature_names = feature_names,class_names = class_names,rounded = True, proportion = False, precision = 2, filled = True)
     #(graph,) = pydot.graph_from_dot_file('tree.dot')
     #graph=graphviz.Source(dot_data)
     #graphviz.render('dot','png','C:/Users/s164616/Documents/MATLAB/Project Computational Biology')
@@ -378,7 +393,7 @@ def prepare_data(dframe,cat,normalize,smote):
     
     if normalize==True and smote!=True:   #scale each of the columns of the tumor markers
         scaler = preprocessing.StandardScaler()
-        markers = scaler.fit_transform(markers.values)
+        markers[TMs] = scaler.fit_transform(markers.values[:,0:len(TMs)])
         scaler.fit(X_train.values[:,0:len(TMs)])
         X_train[TMs] = scaler.transform(X_train.values[:,0:len(TMs)])
         X_test[TMs] = scaler.transform(X_test.values[:,0:len(TMs)])
@@ -386,6 +401,9 @@ def prepare_data(dframe,cat,normalize,smote):
     if smote==True:     #apply synthetic Minority Over-sampling if specified (usually for skewed data distribution)
         sm = SMOTE(random_state=42)   #initialization
         name=markers.columns   #names of the TM's
+        markers,y_true=sm.fit_resample(markers,y_true)
+        markers=pd.DataFrame(markers,columns=TMs)
+        y_true=pd.DataFrame(y_true,columns=['class'])
         X_train,y_train=sm.fit_resample(X_train,y_train)  #apply operation and provide new data
         X_train=pd.DataFrame(X_train,columns=name)   #convert the TM list to a Dataframe
         
@@ -407,11 +425,14 @@ def det_CVscore(clf,markers,y_true,labels):
     NPV=[]
     sensi=[]
     speci=[]
-    for train_index, test_index in sss.split(markers, y_true):
-        clf.fit(markers.iloc[train_index],y_true.iloc[train_index])
-        pred=clf.predict_proba(markers.iloc[test_index])
-        score.append(roc_auc_score(y_true.iloc[test_index],pred[:,1]))
-        P,N,se,sp,_=evaluate_stats(y_true.iloc[test_index],np.rint(pred[:,1]),labels)
+    print(type(markers))
+    print(type(y_true))
+    for train_index, test_index in sss.split(markers, y_true):  #loop over each of the folds
+        clf.fit(markers.iloc[train_index],y_true.iloc[train_index])  #fit fold to classifier
+        pred=clf.predict_proba(markers.iloc[test_index])  #generate predictions
+        score.append(roc_auc_score(y_true.iloc[test_index],pred[:,1]))  #add AUC score
+        P,N,se,sp,_=evaluate_stats(y_true.iloc[test_index],np.rint(pred[:,1]),labels)  #calculate statistics
+        #ensure n0 Nan values
         if np.isnan(P[1])==True:
             P[1]=0
         if np.isnan(N[1])==True:
@@ -437,6 +458,7 @@ def det_CVscore_sim(clf,markers,y_true):
     return CV_score
 
 def get_label(labels,cat):
+    '''provide the correct index of the positive label'''
     if cat=='lung_carcinoma':
         string='Yes'
     elif cat=='cancer_type':
@@ -461,7 +483,7 @@ def decisionT(dframe,cat,save_roc):
     visualize_DT(clf,X_train.columns,labels)
 
     Y_index=get_label(labels,cat)
-    assert clf.classes_[Y_index]==1
+    assert clf.classes_[Y_index]==1  #ensure that the classifier has the correct label as the positive class
     predictions=clf.predict(X_test)       #use reshape(1,-1) on the array when predicting a single array
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,predictions,labels)  #process the result and provide statistics
     auc_DT=roc_auc(y_test,predictions,cat,save_roc,lut,classifier='Decision Tree classifier')    #AUC and ROC curve of classification
@@ -470,7 +492,7 @@ def decisionT(dframe,cat,save_roc):
 
 def Logistic_clas(dframe,cat,save_roc):
     '''Set up a Logistic Regression classifier and train on data after which the predictions of the test data are evaluated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=False)  #prepare data
     X_train=markers
     y_train=y_true
     X_test=markers
@@ -481,7 +503,7 @@ def Logistic_clas(dframe,cat,save_roc):
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
-    assert clf.classes_[Y_index]==1
+    assert clf.classes_[Y_index]==1 #ensure that the classifier has the correct label as the positive class
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
@@ -491,7 +513,7 @@ def Logistic_clas(dframe,cat,save_roc):
 
 def SVM_clas(dframe,cat,save_roc):
     '''Set up a Supported vector machine classifier and train on data after which the predictions of the test data are evaluated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=False)  #prepare data
     X_train=markers
     y_train=y_true
     X_test=markers
@@ -502,7 +524,7 @@ def SVM_clas(dframe,cat,save_roc):
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
-    assert clf.classes_[Y_index]==1
+    assert clf.classes_[Y_index]==1  #ensure that the classifier has the correct label as the positive class
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
@@ -512,7 +534,7 @@ def SVM_clas(dframe,cat,save_roc):
     
 def Naive(dframe,cat,save_roc):
     '''Set up a Gaussian Naive Bayes classifier and train on data after which the predictions of the test data are evaluated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=False)  #prepare data
     X_train=markers
     y_train=y_true
     X_test=markers
@@ -524,7 +546,7 @@ def Naive(dframe,cat,save_roc):
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
-    assert clf.classes_[Y_index]==1
+    assert clf.classes_[Y_index]==1  #ensure that the classifier has the correct label as the positive class
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
@@ -534,7 +556,7 @@ def Naive(dframe,cat,save_roc):
 
 def RandomF(dframe,cat,save_roc):
     '''Set up a Random Forest classifier and train on data after which the predictions of the test data are evaluated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=False)  #prepare data
     X_train=markers
     y_train=y_true
     X_test=markers
@@ -545,7 +567,7 @@ def RandomF(dframe,cat,save_roc):
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
-    assert clf.classes_[Y_index]==1
+    assert clf.classes_[Y_index]==1  #ensure that the classifier has the correct label as the positive class
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
@@ -555,7 +577,7 @@ def RandomF(dframe,cat,save_roc):
 
 def NN(dframe,cat,save_roc):
     '''Set up a k nearest neighbors classifier and train on data after which the predictions of the test data are evaluated'''
-    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=True)  #prepare data
+    markers, y_true, X_train, X_test, y_train, y_test, labels, lut=prepare_data(dframe,cat,normalize=True,smote=False)  #prepare data
     X_train=markers
     y_train=y_true
     X_test=markers
@@ -566,7 +588,7 @@ def NN(dframe,cat,save_roc):
     clf.fit(X_train,y_train)  #fitting training set
     
     Y_index=get_label(labels,cat)
-    assert clf.classes_[Y_index]==1
+    assert clf.classes_[Y_index]==1  #ensure that the classifier has the correct label as the positive class
     predictions=clf.predict_proba(X_test)       #use reshape(1,-1) on the array when predicting a single array
     predictions=predictions[:,Y_index]
     PPV,NPV,sensitivity,specificity,report=evaluate_stats(y_test,np.rint(predictions),labels)  #statistics
@@ -658,11 +680,11 @@ def get_upper(dframe,optr,locs):
     '''get the upper value of the threshold range'''
     TMs=dframe.columns[locs]    #tumor markers
     thres=dict()    #dictionary for the upper values
-    for i in range(0,7):   #look at each marker
+    for i in range(0,len(locs)):   #look at each marker
         TM=TMs[i]    #current marker name
         waarde=optr[TM]   #range of the marker
         upper=waarde.split('-')[1]   #only take upper value
-        thres[TM]=upper    #store upper value in new dictionary
+        thres[TM]=float(upper)    #store upper value in new dictionary
     return thres
         
 def make_hist(dframe,cat,locs,**kwargs):
@@ -765,14 +787,15 @@ def make_barCV(cat,classifiers,CV_scores):
     return
 
 def marker_locations(dframe):
+    '''provide the column indexes which contain the marker concentrations'''
     markers=['TM_CA15.3 (U/mL)','TM_CEA (ng/mL)','TM_CYFRA (ng/mL)','TM_HE4 (pmol/L)','TM_NSE (ng/mL)','TM_PROGRP (pg/mL)','TM_SCC (ng/mL)']
     locations=[]
-    for index,column in enumerate(dframe.columns):
-        if column in markers:
+    for index,column in enumerate(dframe.columns):  #loop over all the columns in the dataframe
+        if column in markers:   #if the column conatins a marker add the index
             locations.append(index)
     return locations
     
-category_to_investigate='cancer_type'
+category_to_investigate='lung_carcinoma'
 file_loc='data_new.csv'
 dframe=read_data(file_loc)    #read data
 locs=marker_locations(dframe)
@@ -782,6 +805,7 @@ dframe=remove_nan_markers(dframe,locs)
 make_clustermap(dframe=dframe, remove=True, save_fig=False, locs=locs, class_sort=category_to_investigate)
 
 thresholds={'TM_CA15.3 (U/mL)': 35,'TM_CEA (ng/mL)':5,'TM_CYFRA (ng/mL)':3.3,'TM_NSE (ng/mL)':25,'TM_PROGRP (pg/mL)':50,'TM_SCC (ng/mL)':2}
+#the last section is to run each function, calculate statistics and visualization of the performances
 if category_to_investigate=='lung_carcinoma':
     PPV_p,NPV_p,sensi_p,speci_p,report_p=approach_paper(dframe,thresholds,locs,category_to_investigate)        
 aucDT,PPV_DT,NPV_DT,sensitivity_DT,specificity_DT, report_DT, CV_score_DT=decisionT(dframe,category_to_investigate,save_roc=False)
@@ -806,15 +830,18 @@ else:
 
 make_bar(category_to_investigate,classifiers,PPV=PPVs,NPV=NPVs,sensitivity=sensis,specificity=specis)
 
-all_cmd=False
+all_cmd=False    #True if all thresholds need to be calculated and visualized
 if all_cmd==True:
     optr,optm=optimal_thresBoot(dframe,locs,category_to_investigate)
+    optr2,optm_prec=optimal_thresBoot(dframe,locs,category_to_investigate,used_metric='precision')
+    optr3,optm_spec=optimal_thresBoot(dframe,locs,category_to_investigate,used_metric='specificity')
     opt_FD=optimal_thres(dframe,locs,category_to_investigate)
+    optCV=optimal_thresCV(dframe,locs,category_to_investigate)
     opt_upper=get_upper(dframe,optr,locs)
     if category_to_investigate=='lung_carcinoma':
-        make_hist(dframe,category_to_investigate,locs,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
+        make_hist(dframe,category_to_investigate,locs,paper=thresholds,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper,Bootstrap_precision=optm_prec,Bootstrap_specificity=optm_spec)
     elif category_to_investigate=='cancer_type':
-        make_hist(dframe,category_to_investigate,locs,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper)
+        make_hist(dframe,category_to_investigate,locs,Full_dataset=opt_FD,Bootstrap_AUC=optm,upper_Bootstrap=opt_upper,Bootstrap_precision=optm_prec,Bootstrap_specificity=optm_spec)
 
 
 classifiers=['Decision Tree','Logistic Regression','SVM','Naive Bayes','Random Forest','Nearest Neighbors']
